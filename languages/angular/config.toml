@@ -1,0 +1,5 @@
+name = "Angular"
+grammar = "angular"
+path_suffixes = ["component.html", "ng.html"]
+block_comment = { start = "<!--", prefix = "", end = "-->", tab_size = 0 }
+tab_size = 2

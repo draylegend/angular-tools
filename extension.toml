@@ -1,7 +1,11 @@
 id = "angular-tools"
 name = "Angular Tools"
 description = "Angular templates with the official Angular Language Server."
-version = "0.0.0"
+version = "0.1.0"
 schema_version = 1
 authors = ["Vladimir Drayling <draylegend@gmail.com>"]
 repository = "https://github.com/draylegend/angular-tools"
+
+[grammars.angular]
+repository = "https://github.com/dlvandenberg/tree-sitter-angular"
+rev = "38a8014ed5452cd6b7cf1399c00177a1f5374256"

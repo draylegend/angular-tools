@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0
+
+- Added the Angular Language Server for completion, diagnostics, hover and navigation in Angular templates.
+
 ## 0.7.0
 
 - Added an outline for Angular templates.

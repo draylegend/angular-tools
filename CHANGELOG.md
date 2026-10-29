@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0
+
+- Added autoclosing of brackets and quotes in Angular templates.
+
 ## 0.3.0
 
 - Added bracket matching for Angular templates.

@@ -5,6 +5,8 @@ block_comment = { start = "<!--", prefix = "", end = "-->", tab_size = 0 }
 tab_size = 2
 autoclose_before = ">})]\"'"
 brackets = [
+  # Closes an unfinished opening tag: `<app-card` + `/` gives `<app-card/>`.
+  { start = "/", end = ">", close = true, surround = false, newline = false, not_in = ["comment", "string", "markup"] },
   { start = "{", end = "}", close = true, newline = true, not_in = ["comment"] },
   { start = "[", end = "]", close = true, newline = true, not_in = ["comment"] },
   { start = "(", end = ")", close = true, newline = true, not_in = ["comment"] },

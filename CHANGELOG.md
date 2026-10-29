@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0
+
+- Added closing of unfinished opening tags with `/` in Angular templates.
+
 ## 0.9.0
 
 - Added the Angular Language Server to HTML and TypeScript files.

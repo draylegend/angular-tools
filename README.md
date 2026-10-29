@@ -12,6 +12,8 @@ Files ending in `.component.html` or `.ng.html` open as **Angular** and get Angu
 }
 ```
 
+Typing `/` at the end of an unfinished opening tag closes it: `<app-card` becomes `<app-card/>`.
+
 ## Language server
 
 The extension installs the official [`@angular/language-server`](https://www.npmjs.com/package/@angular/language-server) with Zed's Node.js. The server package pins its own TypeScript and `@angular/language-service`.

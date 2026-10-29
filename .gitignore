@@ -1,0 +1,4 @@
+# Build output of a dev install.
+/target/
+/grammars/
+*.wasm

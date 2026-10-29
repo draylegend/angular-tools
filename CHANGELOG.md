@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1
+
+- Placed the caret after `>` when `/` closes a tag, in Zed builds that support it.
+
 ## 0.10.0
 
 - Added closing of unfinished opening tags with `/` in Angular templates.

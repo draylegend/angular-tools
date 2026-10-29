@@ -12,7 +12,7 @@ Files ending in `.component.html` or `.ng.html` open as **Angular** and get Angu
 }
 ```
 
-Typing `/` at the end of an unfinished opening tag closes it: `<app-card` becomes `<app-card/>`.
+Typing `/` at the end of an unfinished opening tag closes it: `<app-card` becomes `<app-card/>`. The caret ends up after `>` in Zed builds that support the `cursor_after_end` bracket option and before it in others.
 
 ## Language server
 

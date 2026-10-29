@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0
+
+- Added bracket matching for Angular templates.
+
 ## 0.2.0
 
 - Added syntax highlighting for Angular templates.

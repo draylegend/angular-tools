@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Added automatic indentation for Angular templates.
+
 ## 0.5.0
 
 - Added CSS and JavaScript highlighting inside Angular templates.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+
+- Added CSS and JavaScript highlighting inside Angular templates.
+
 ## 0.4.0
 
 - Added autoclosing of brackets and quotes in Angular templates.

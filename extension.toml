@@ -1,17 +1,21 @@
 id = "angular-tools"
 name = "Angular Tools"
 description = "Angular templates with the official Angular Language Server."
-version = "0.8.0"
+version = "0.9.0"
 schema_version = 1
 authors = ["Vladimir Drayling <draylegend@gmail.com>"]
 repository = "https://github.com/draylegend/angular-tools"
 
 [language_servers.angular-tools]
 name = "Angular Language Server"
-languages = ["Angular"]
+# Like the official VS Code client, the server starts for every HTML and
+# TypeScript file and turns itself off in projects without @angular/core.
+languages = ["Angular", "HTML", "TypeScript"]
 
 [language_servers.angular-tools.language_ids]
 "Angular" = "html"
+"HTML" = "html"
+"TypeScript" = "typescript"
 
 [grammars.angular]
 repository = "https://github.com/dlvandenberg/tree-sitter-angular"

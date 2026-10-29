@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0
+
+- Added the Angular Language Server to HTML and TypeScript files.
+
 ## 0.8.0
 
 - Added the Angular Language Server for completion, diagnostics, hover and navigation in Angular templates.

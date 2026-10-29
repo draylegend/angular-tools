@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0
+
+- Added an outline for Angular templates.
+
 ## 0.6.0
 
 - Added automatic indentation for Angular templates.

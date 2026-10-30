@@ -28,6 +28,10 @@ Ctrl-click on a component tag or a directive attribute opens the selector that d
 
 Find references on a selector name lists the selector string and every tag or attribute that uses it, again including pages such as `index.html`. A selector string is its own definition, like any declaration: Ctrl-hover underlines it and Ctrl-click shows these references.
 
+## Compatibility
+
+Install either Angular Tools or the **Angular** extension (`angular`) from the Zed extension registry, not both. Both register a language named `Angular` and a grammar named `angular`, and Zed keeps only one of each, so highlighting and `/` closing depend on which extension loaded last. Both also start an Angular Language Server, so completions and diagnostics in templates would appear twice.
+
 ## Development
 
 In Zed, run `zed: install dev extension` and select this directory.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.16.1
+
+- Fixed Ctrl-hover in HTML files rereading every TypeScript file of the project; only changed files are read again.
+- Fixed selector lookups running in HTML files of projects without Angular.
+
 ## 0.16.0
 
 - Added find references for component and directive selectors, so Ctrl-click on a selector string, now underlined on Ctrl-hover, lists every tag and attribute that uses it, including `index.html`.

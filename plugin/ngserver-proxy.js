@@ -79,24 +79,48 @@ function readFile(fileName) {
   }
 }
 
+// Parsed TypeScript files by name. A file is read and parsed again only when
+// its open text or its modification time and size change, because go to
+// definition runs on every Ctrl-hover.
 const parsed = new Map();
+
+function version(fileName) {
+  if (documents.has(fileName)) return documents.get(fileName);
+  try {
+    const stat = fs.statSync(fileName);
+    return `${stat.mtimeMs}:${stat.size}`;
+  } catch {
+    return undefined;
+  }
+}
 
 function sourceFiles() {
   const files = findFiles(roots, '.ts').filter(fileName => !fileName.endsWith('.d.ts'));
   return files.flatMap(fileName => {
+    const current = version(fileName);
+    if (current === undefined) return [];
+    const cached = parsed.get(fileName);
+    if (cached && cached.version === current) return [cached.sourceFile];
     const text = readFile(fileName);
     if (text === undefined) return [];
-    const cached = parsed.get(fileName);
-    if (cached && cached.text === text) return [cached.sourceFile];
     const sourceFile = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true);
-    parsed.set(fileName, {text, sourceFile});
+    parsed.set(fileName, {version: current, sourceFile});
     return [sourceFile];
   });
+}
+
+// Selector features only run in Angular workspaces; elsewhere the server turns
+// itself off and the proxy only passes messages through.
+let angular = false;
+
+function isAngularWorkspace(root) {
+  return fs.existsSync(path.join(root, 'angular.json')) || (readFile(path.join(root, 'package.json')) ?? '').includes('"@angular/core"');
 }
 
 const project = {ts, sourceFiles, readFile, htmlFiles: () => findFiles(roots, '.html')};
 
 function selectorAt(params) {
+  if (!angular) return undefined;
   const fileName = fileURLToPath(params.textDocument.uri);
   if (/\.[cm]?tsx?$/.test(fileName)) return undefined;
   const text = readFile(fileName);
@@ -147,6 +171,7 @@ frames(process.stdin, (message, frame) => {
     if (method === 'initialize') {
       const folders = params.workspaceFolders?.map(folder => folder.uri) ?? (params.rootUri ? [params.rootUri] : []);
       roots = folders.map(uri => fileURLToPath(uri));
+      angular = roots.some(isAngularWorkspace);
     } else if (method === 'textDocument/didOpen') {
       documents.set(fileURLToPath(params.textDocument.uri), params.textDocument.text);
     } else if (method === 'textDocument/didChange') {

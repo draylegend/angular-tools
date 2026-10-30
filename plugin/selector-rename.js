@@ -129,9 +129,15 @@ function stringValue(ts, node) {
 
 /**
  * Components and directives declared in a source file, with the offsets of
- * their selector strings and their inline or external templates.
+ * their selector strings and their inline or external templates. TypeScript
+ * creates a new source file object for every change, so the result is
+ * remembered per object.
  */
+const declarationCache = new WeakMap();
+
 function declarations(ts, sourceFile) {
+  const cached = declarationCache.get(sourceFile);
+  if (cached) return cached;
   const found = [];
   const visit = node => {
     if (ts.isDecorator(node) && ts.isCallExpression(node.expression)) {
@@ -158,6 +164,7 @@ function declarations(ts, sourceFile) {
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
+  declarationCache.set(sourceFile, found);
   return found;
 }
 

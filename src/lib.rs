@@ -8,15 +8,20 @@ const SERVER_VERSION: &str = "22.2.3";
 const SERVER_PATH: &str = "node_modules/@angular/language-server/index.js";
 // Installed with the server; the package is also a tsserver plugin.
 const SERVICE_PACKAGE: &str = "@angular/language-service";
-// The extension's own tsserver plugin, written into the work directory.
+// The extension's own tsserver plugin and server proxy, written into the
+// work directory.
 const PLUGIN_PACKAGE: &str = "angular-tools";
 const PLUGIN_DIR: &str = "plugin";
-const PLUGIN_FILES: [(&str, &str); 3] = [
+const PLUGIN_FILES: [(&str, &str); 4] = [
     ("package.json", include_str!("../plugin/package.json")),
     ("index.js", include_str!("../plugin/index.js")),
     (
         "selector-rename.js",
         include_str!("../plugin/selector-rename.js"),
+    ),
+    (
+        "ngserver-proxy.js",
+        include_str!("../plugin/ngserver-proxy.js"),
     ),
 ];
 
@@ -66,8 +71,8 @@ impl AngularToolsExtension {
         Ok(())
     }
 
-    /// Writes the plugin into `plugin/node_modules/angular-tools`, where
-    /// tsserver resolves it from the `plugin` probe location.
+    /// Writes the plugin and the proxy into `plugin/node_modules/angular-tools`,
+    /// where tsserver resolves the plugin from the `plugin` probe location.
     fn install_plugin() -> Result<()> {
         let dir = format!("{PLUGIN_DIR}/node_modules/{PLUGIN_PACKAGE}");
         fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
@@ -118,9 +123,17 @@ impl zed::Extension for AngularToolsExtension {
         worktree: &zed::Worktree,
     ) -> Result<zed::Command> {
         self.install_server(language_server_id)?;
+        Self::install_plugin()?;
         let work_dir = env::current_dir().map_err(|error| error.to_string())?;
         let probe_locations = format!("{},{}", work_dir.to_string_lossy(), worktree.root_path());
-        let mut args = vec![work_dir.join(SERVER_PATH).to_string_lossy().into_owned()];
+        // The proxy starts the server and adds selector renames in templates.
+        let proxy = work_dir.join(format!(
+            "{PLUGIN_DIR}/node_modules/{PLUGIN_PACKAGE}/ngserver-proxy.js"
+        ));
+        let mut args = vec![
+            proxy.to_string_lossy().into_owned(),
+            work_dir.join(SERVER_PATH).to_string_lossy().into_owned(),
+        ];
         args.extend(server_args(&probe_locations));
 
         Ok(zed::Command {

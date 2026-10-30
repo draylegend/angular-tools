@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.0
+
+- Added renaming of component and directive selectors from HTML templates.
+
 ## 0.13.0
 
 - Added renaming of component and directive selectors from TypeScript files, updating every template that uses them.

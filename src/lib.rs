@@ -8,6 +8,17 @@ const SERVER_VERSION: &str = "22.2.3";
 const SERVER_PATH: &str = "node_modules/@angular/language-server/index.js";
 // Installed with the server; the package is also a tsserver plugin.
 const SERVICE_PACKAGE: &str = "@angular/language-service";
+// The extension's own tsserver plugin, written into the work directory.
+const PLUGIN_PACKAGE: &str = "angular-tools";
+const PLUGIN_DIR: &str = "plugin";
+const PLUGIN_FILES: [(&str, &str); 3] = [
+    ("package.json", include_str!("../plugin/package.json")),
+    ("index.js", include_str!("../plugin/index.js")),
+    (
+        "selector-rename.js",
+        include_str!("../plugin/selector-rename.js"),
+    ),
+];
 
 struct AngularToolsExtension {
     server_ready: bool,
@@ -52,6 +63,20 @@ impl AngularToolsExtension {
             &zed::LanguageServerInstallationStatus::None,
         );
         self.server_ready = true;
+        Ok(())
+    }
+
+    /// Writes the plugin into `plugin/node_modules/angular-tools`, where
+    /// tsserver resolves it from the `plugin` probe location.
+    fn install_plugin() -> Result<()> {
+        let dir = format!("{PLUGIN_DIR}/node_modules/{PLUGIN_PACKAGE}");
+        fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+        for (name, content) in PLUGIN_FILES {
+            let path = format!("{dir}/{name}");
+            if fs::read_to_string(&path).ok().as_deref() != Some(content) {
+                fs::write(&path, content).map_err(|error| error.to_string())?;
+            }
+        }
         Ok(())
     }
 }
@@ -105,8 +130,9 @@ impl zed::Extension for AngularToolsExtension {
         })
     }
 
-    /// Loads the Angular language service into vtsls as a tsserver plugin, so
-    /// TypeScript features such as rename also cover the templates.
+    /// Loads the Angular language service and the extension's own plugin into
+    /// vtsls as tsserver plugins, so TypeScript features such as rename also
+    /// cover templates and selectors.
     fn language_server_additional_workspace_configuration(
         &mut self,
         language_server_id: &LanguageServerId,
@@ -117,15 +143,25 @@ impl zed::Extension for AngularToolsExtension {
             return Ok(None);
         }
         self.install_server(language_server_id)?;
+        Self::install_plugin()?;
         let work_dir = env::current_dir().map_err(|error| error.to_string())?;
+        // The extension's plugin comes last, so it wraps the Angular one and
+        // adds selector renames on top of it.
         Ok(Some(serde_json::json!({
             "vtsls": {
                 "tsserver": {
-                    "globalPlugins": [{
-                        "name": SERVICE_PACKAGE,
-                        "location": work_dir.join("node_modules").to_string_lossy(),
-                        "enableForWorkspaceTypeScriptVersions": true,
-                    }],
+                    "globalPlugins": [
+                        {
+                            "name": SERVICE_PACKAGE,
+                            "location": work_dir.join("node_modules").to_string_lossy(),
+                            "enableForWorkspaceTypeScriptVersions": true,
+                        },
+                        {
+                            "name": PLUGIN_PACKAGE,
+                            "location": work_dir.join(PLUGIN_DIR).to_string_lossy(),
+                            "enableForWorkspaceTypeScriptVersions": true,
+                        },
+                    ],
                 },
             },
         })))

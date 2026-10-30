@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.0
+
+- Added renaming of component and directive selectors from TypeScript files, updating every template that uses them.
+
 ## 0.12.0
 
 - Added the Angular language service to vtsls in Angular projects, so renaming a component member in TypeScript also updates its templates.

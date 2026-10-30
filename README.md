@@ -22,11 +22,13 @@ Like the official VS Code client, the server starts for every HTML file, so exte
 
 In TypeScript files, Zed's TypeScript server vtsls does the work: in Angular projects the extension loads the same `@angular/language-service` into it as a tsserver plugin. Inline templates get completion, diagnostics and navigation, and renaming a component member also updates its templates.
 
+The official language service does not rename selectors, so the extension adds its own small tsserver plugin: renaming `app-card` or `[app-highlight]` in a `selector` string or in an inline template updates the selector and every matching tag or attribute in all templates.
+
 ## Development
 
 In Zed, run `zed: install dev extension` and select this directory.
 
-The tests check the queries against the grammar that the dev install checks out into `grammars/angular`:
+The tests check the queries against the grammar that the dev install checks out into `grammars/angular`, and the selector rename module:
 
 ```sh
 npm install

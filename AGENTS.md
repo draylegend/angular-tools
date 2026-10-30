@@ -5,7 +5,7 @@
 - Build the extension in small steps: one commit per concrete change.
 - Follow Zed's [publishing prerequisites](https://zed.dev/docs/extensions/publishing/prerequisites) and [license requirements](https://zed.dev/docs/extensions/publishing/license-requirements).
 - Write everything in this repository in English.
-- Run `npm test` before committing changes to `languages/`.
+- Run `npm test` before committing changes to `languages/` or `plugin/`.
 - Pushing and publishing to the Zed extension registry need the maintainer's confirmation.
 
 ## Versioning

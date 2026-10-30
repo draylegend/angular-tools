@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.0
+
+- Filtered completions by the whole hyphenated name, such as `app-card`, in Angular templates.
+
 ## 0.10.1
 
 - Placed the caret after `>` when `/` closes a tag, in Zed builds that support it.

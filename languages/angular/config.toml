@@ -3,6 +3,8 @@ grammar = "angular"
 path_suffixes = ["component.html", "ng.html"]
 block_comment = { start = "<!--", prefix = "", end = "-->", tab_size = 0 }
 tab_size = 2
+# Selectors such as `app-card` stay one word while completions are filtered.
+completion_query_characters = ["-"]
 autoclose_before = ">})]\"'"
 brackets = [
   # Closes an unfinished opening tag: `<app-card` + `/` gives `<app-card/>`.

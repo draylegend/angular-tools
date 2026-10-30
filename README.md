@@ -18,7 +18,9 @@ Typing `/` at the end of an unfinished opening tag closes it: `<app-card` become
 
 The extension installs the official [`@angular/language-server`](https://www.npmjs.com/package/@angular/language-server) with Zed's Node.js. The server package pins its own TypeScript and `@angular/language-service`.
 
-Like the official VS Code client, the server starts for every HTML and TypeScript file, so external templates, inline templates and components work without any settings. In projects without `@angular/core` the server turns itself off.
+Like the official VS Code client, the server starts for every HTML file, so external templates work without any settings. In projects without `@angular/core` the server turns itself off.
+
+In TypeScript files, Zed's TypeScript server vtsls does the work: in Angular projects the extension loads the same `@angular/language-service` into it as a tsserver plugin. Inline templates get completion, diagnostics and navigation, and renaming a component member also updates its templates.
 
 ## Development
 

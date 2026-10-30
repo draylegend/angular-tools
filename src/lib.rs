@@ -1,11 +1,13 @@
 use std::{env, fs};
-use zed_extension_api::{self as zed, LanguageServerId, Result};
+use zed_extension_api::{self as zed, serde_json, LanguageServerId, Result};
 
 const SERVER_PACKAGE: &str = "@angular/language-server";
 // The server pins its own @angular/language-service and TypeScript, so one
 // version here fixes every package that gets installed.
 const SERVER_VERSION: &str = "22.2.3";
 const SERVER_PATH: &str = "node_modules/@angular/language-server/index.js";
+// Installed with the server; the package is also a tsserver plugin.
+const SERVICE_PACKAGE: &str = "@angular/language-service";
 
 struct AngularToolsExtension {
     server_ready: bool,
@@ -54,6 +56,13 @@ impl AngularToolsExtension {
     }
 }
 
+fn is_angular_worktree(worktree: &zed::Worktree) -> bool {
+    worktree.read_text_file("angular.json").is_ok()
+        || worktree
+            .read_text_file("package.json")
+            .is_ok_and(|package| package.contains("\"@angular/core\""))
+}
+
 /// Arguments the official VS Code client passes with its default settings.
 /// The server resolves TypeScript and @angular/language-service from the
 /// probe locations, in order.
@@ -94,6 +103,32 @@ impl zed::Extension for AngularToolsExtension {
             args,
             env: Default::default(),
         })
+    }
+
+    /// Loads the Angular language service into vtsls as a tsserver plugin, so
+    /// TypeScript features such as rename also cover the templates.
+    fn language_server_additional_workspace_configuration(
+        &mut self,
+        language_server_id: &LanguageServerId,
+        target_language_server_id: &LanguageServerId,
+        worktree: &zed::Worktree,
+    ) -> Result<Option<serde_json::Value>> {
+        if target_language_server_id.as_ref() != "vtsls" || !is_angular_worktree(worktree) {
+            return Ok(None);
+        }
+        self.install_server(language_server_id)?;
+        let work_dir = env::current_dir().map_err(|error| error.to_string())?;
+        Ok(Some(serde_json::json!({
+            "vtsls": {
+                "tsserver": {
+                    "globalPlugins": [{
+                        "name": SERVICE_PACKAGE,
+                        "location": work_dir.join("node_modules").to_string_lossy(),
+                        "enableForWorkspaceTypeScriptVersions": true,
+                    }],
+                },
+            },
+        })))
     }
 }
 

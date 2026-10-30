@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.0
+
+- Added the Angular language service to vtsls in Angular projects, so renaming a component member in TypeScript also updates its templates.
+- Stopped starting the Angular Language Server for TypeScript files, which vtsls now handles.
+
 ## 0.11.0
 
 - Filtered completions by the whole hyphenated name, such as `app-card`, in Angular templates.

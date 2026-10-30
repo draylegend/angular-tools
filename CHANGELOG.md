@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.16.2
+
+- Fixed a hang of the Angular Language Server and of TypeScript features on a template with an unclosed `<script>` or `<style>` tag.
+- Fixed selector renames editing files outside the project through a `templateUrl` or a symbolic link.
+- Fixed TypeScript rename, references and go to definition failing when a selector lookup hits an error; they now get the regular answer.
+- Fixed selector renames and references in a TypeScript file without a tsconfig searching every HTML file in its folder.
+
 ## 0.16.1
 
 - Fixed Ctrl-hover in HTML files rereading every TypeScript file of the project; only changed files are read again.

@@ -1,0 +1,55 @@
+const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const test = require('node:test');
+const ts = require('typescript');
+const init = require('../plugin/index.js');
+
+function create({program, projectKind, currentDirectory = '/'}) {
+  const log = [];
+  const service = {
+    getProgram: program,
+    getRenameInfo: () => 'renamed by the language service',
+    findRenameLocations: () => 'located by the language service',
+  };
+  const info = {
+    languageService: service,
+    languageServiceHost: {readFile: fileName => fs.readFileSync(fileName, 'utf8')},
+    project: {projectKind, getCurrentDirectory: () => currentDirectory, projectService: {logger: {info: message => log.push(message)}}},
+  };
+  return {plugin: init({typescript: ts}).create(info), log};
+}
+
+test('a failing selector lookup leaves the request to the language service', () => {
+  const {plugin, log} = create({
+    program: () => {
+      throw new Error('broken program');
+    },
+    projectKind: ts.server.ProjectKind.Configured,
+  });
+  assert.equal(plugin.getRenameInfo('/app/x.ts', 0), 'renamed by the language service');
+  assert.equal(plugin.findRenameLocations('/app/x.ts', 0), 'located by the language service');
+  assert.match(log[0], /broken program/);
+});
+
+test('a project without tsconfig searches no HTML files', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'angular-tools-'));
+  try {
+    const component = path.join(dir, 'x.ts');
+    const source = "@Component({ selector: 'app-x', template: '' })\nexport class X {}\n";
+    fs.writeFileSync(component, source);
+    fs.writeFileSync(path.join(dir, 'page.html'), '<app-x></app-x>\n');
+    const sourceFile = ts.createSourceFile(component, source, ts.ScriptTarget.Latest, true);
+    const program = () => ({getSourceFiles: () => [sourceFile]});
+    const position = source.indexOf('app-x') + 1;
+    const files = kind =>
+      create({program, projectKind: kind, currentDirectory: dir})
+        .plugin.findRenameLocations(component, position)
+        .map(({fileName}) => path.basename(fileName));
+    assert.deepEqual(files(ts.server.ProjectKind.Configured), ['x.ts', 'page.html', 'page.html']);
+    assert.deepEqual(files(ts.server.ProjectKind.Inferred), ['x.ts']);
+  } finally {
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
+});

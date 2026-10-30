@@ -1,7 +1,12 @@
 const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const ts = require('typescript');
 const {
+  containedIn,
+  findFiles,
   parseSelector,
   renameLocations,
   scanTemplate,
@@ -43,12 +48,24 @@ test('templates yield tag names and bound attribute names', () => {
   for (const name of scanTemplate(template)) assert.equal(template.slice(name.start, name.end), name.name);
 });
 
+test('unclosed script and style tags end the scan instead of looping', () => {
+  for (const template of ['<script>', '<div><script>', '<p>x</p><style>', '<style>a {}']) {
+    assert.ok(names(scanTemplate(template)).length > 0, template);
+  }
+  assert.deepEqual(names(scanTemplate('<script>if (a<b) {}</script><app-x></app-x>')), [
+    'element script',
+    'element script',
+    'element app-x',
+    'element app-x',
+  ]);
+});
+
 function project(files) {
   const sourceFiles = Object.entries(files)
     .filter(([fileName]) => fileName.endsWith('.ts'))
     .map(([fileName, text]) => ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true));
   const htmlFiles = () => Object.keys(files).filter(fileName => fileName.endsWith('.html'));
-  return {ts, sourceFiles: () => sourceFiles, readFile: fileName => files[fileName], htmlFiles};
+  return {ts, sourceFiles: () => sourceFiles, readFile: fileName => files[fileName], htmlFiles, contains: () => true};
 }
 
 const files = {
@@ -114,4 +131,34 @@ test('names that no selector declares are left to other rename providers', () =>
   const sources = project(files);
   const target = targetAt(sources, '/app/home.html', files['/app/home.html'].indexOf('app-cards') + 1);
   assert.equal(renameLocations(sources, target), undefined);
+});
+
+test('renames stay inside the project despite templateUrl and symbolic links', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'angular-tools-'));
+  try {
+    const root = path.join(base, 'project');
+    const outside = path.join(base, 'outside');
+    fs.mkdirSync(path.join(root, 'src'), {recursive: true});
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(outside, 'private.html'), '<app-x></app-x>\n');
+    fs.writeFileSync(path.join(outside, 'linked.html'), '<app-x></app-x>\n');
+    fs.symlinkSync(path.join(outside, 'linked.html'), path.join(root, 'src/link.html'));
+    fs.writeFileSync(path.join(root, 'src/page.html'), '<app-x></app-x>\n');
+    const component = path.join(root, 'src/x.ts');
+    const source = "@Component({ selector: 'app-x', templateUrl: '../../outside/private.html' })\nexport class X {}\n";
+    fs.writeFileSync(component, source);
+
+    const sources = {
+      ts,
+      sourceFiles: () => [ts.createSourceFile(component, source, ts.ScriptTarget.Latest, true)],
+      readFile: fileName => fs.readFileSync(fileName, 'utf8'),
+      htmlFiles: () => findFiles([root], '.html'),
+      contains: containedIn([root]),
+    };
+    const target = targetAt(sources, component, source.indexOf('app-x') + 1);
+    const files = [...new Set(renameLocations(sources, target).map(({fileName}) => path.relative(base, fileName)))];
+    assert.deepEqual(files, [path.join('project', 'src', 'x.ts'), path.join('project', 'src', 'page.html')]);
+  } finally {
+    fs.rmSync(base, {recursive: true, force: true});
+  }
 });

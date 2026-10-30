@@ -10,7 +10,7 @@ const {spawn} = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const {fileURLToPath, pathToFileURL} = require('node:url');
-const {findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
+const {containedIn, findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
 
 const [serverEntry, ...serverArgs] = process.argv.slice(2);
 const ts = require(require.resolve('typescript', {paths: [path.dirname(serverEntry)]}));
@@ -20,6 +20,9 @@ server.on('exit', code => process.exit(code ?? 0));
 const documents = new Map();
 let roots = [];
 
+// Splits a stream into LSP frames. A header without a length is dropped, and a
+// body that is not JSON reaches the handler as undefined, so it can still be
+// passed on unchanged.
 function frames(stream, onMessage) {
   let buffer = Buffer.alloc(0);
   stream.on('data', chunk => {
@@ -27,11 +30,21 @@ function frames(stream, onMessage) {
     for (;;) {
       const headerEnd = buffer.indexOf('\r\n\r\n');
       if (headerEnd < 0) return;
-      const length = Number(/content-length:\s*(\d+)/i.exec(buffer.subarray(0, headerEnd).toString('ascii'))?.[1]);
-      const end = headerEnd + 4 + length;
+      const length = /content-length:\s*(\d+)/i.exec(buffer.subarray(0, headerEnd).toString('ascii'))?.[1];
+      if (length === undefined) {
+        buffer = buffer.subarray(headerEnd + 4);
+        continue;
+      }
+      const end = headerEnd + 4 + Number(length);
       if (buffer.length < end) return;
       const frame = buffer.subarray(0, end);
-      onMessage(JSON.parse(buffer.subarray(headerEnd + 4, end).toString('utf8')), frame);
+      let message;
+      try {
+        message = JSON.parse(buffer.subarray(headerEnd + 4, end).toString('utf8'));
+      } catch {
+        message = undefined;
+      }
+      onMessage(message, frame);
       buffer = buffer.subarray(end);
     }
   });
@@ -117,7 +130,7 @@ function isAngularWorkspace(root) {
   return fs.existsSync(path.join(root, 'angular.json')) || (readFile(path.join(root, 'package.json')) ?? '').includes('"@angular/core"');
 }
 
-const project = {ts, sourceFiles, readFile, htmlFiles: () => findFiles(roots, '.html')};
+const project = {ts, sourceFiles, readFile, htmlFiles: () => findFiles(roots, '.html'), contains: () => false};
 
 function selectorAt(params) {
   if (!angular) return undefined;
@@ -166,12 +179,13 @@ function toLocation(location) {
 }
 
 frames(process.stdin, (message, frame) => {
-  const {method, params, id} = message;
+  const {method, params, id} = message ?? {};
   try {
     if (method === 'initialize') {
       const folders = params.workspaceFolders?.map(folder => folder.uri) ?? (params.rootUri ? [params.rootUri] : []);
       roots = folders.map(uri => fileURLToPath(uri));
       angular = roots.some(isAngularWorkspace);
+      project.contains = containedIn(roots);
     } else if (method === 'textDocument/didOpen') {
       documents.set(fileURLToPath(params.textDocument.uri), params.textDocument.text);
     } else if (method === 'textDocument/didChange') {

@@ -4,15 +4,21 @@
 // definition on them: from a tag or attribute in an inline template it leads
 // to the declaring selector string instead of the class, and a selector string
 // is its own definition, like any declaration, so the editor underlines it and
-// shows its references on click. Every other request passes through.
+// shows its references on click. Every other request passes through, and so
+// does any request this plugin fails to answer.
 'use strict';
 
-const {findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
+const {containedIn, findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
 
 function init({typescript: ts}) {
   function create(info) {
     const service = info.languageService;
     const host = info.languageServiceHost;
+    // HTML files are searched in the folder of the project's tsconfig. A
+    // project without one, such as a single file opened on its own, has no
+    // folder that bounds the search, so it gets none.
+    const configured = info.project.projectKind === ts.server.ProjectKind.Configured;
+    const roots = configured ? [info.project.getCurrentDirectory()] : [];
     const project = {
       ts,
       sourceFiles: () =>
@@ -24,31 +30,48 @@ function init({typescript: ts}) {
         if (snapshot) return snapshot.getText(0, snapshot.getLength());
         return (host.readFile ?? ts.sys.readFile)(fileName);
       },
-      htmlFiles: () => findFiles([info.project.getCurrentDirectory()], '.html'),
-    };
-    // Every use of the selector name at a position: selector strings, tags and
-    // attributes in templates and in HTML pages.
-    const selectorUses = (fileName, position) => {
-      const target = targetAt(project, fileName, position);
-      const locations = target && renameLocations(project, target);
-      return locations && {target, locations};
+      htmlFiles: () => findFiles(roots, '.html'),
+      contains: containedIn(roots),
     };
 
-    const selectorDefinition = (fileName, position) => {
-      const target = targetAt(project, fileName, position);
-      if (!target) return undefined;
-      const locations = target.source === 'selector' ? [target] : selectorLocations(project, target);
-      if (!locations.length) return undefined;
-      const definitions = locations.map(location => ({
-        fileName: location.fileName,
-        textSpan: {start: location.start, length: location.end - location.start},
-        kind: ts.ScriptElementKind.string,
-        name: target.name,
-        containerKind: ts.ScriptElementKind.unknown,
-        containerName: '',
-      }));
-      return {definitions, textSpan: {start: target.start, length: target.end - target.start}};
+    // Runs a selector lookup; on any error the request goes to the wrapped
+    // language service as if the plugin were not there.
+    const attempt = lookup => {
+      try {
+        return lookup();
+      } catch (error) {
+        info.project.projectService.logger.info(`angular-tools: ${error.stack ?? error}`);
+        return undefined;
+      }
     };
+
+    // Every use of the selector name at a position: selector strings, tags and
+    // attributes in templates and in HTML pages.
+    const selectorUses = (fileName, position) =>
+      attempt(() => {
+        const target = targetAt(project, fileName, position);
+        const locations = target && renameLocations(project, target);
+        return locations && {target, locations};
+      });
+
+    const selectorDefinition = (fileName, position) =>
+      attempt(() => {
+        const target = targetAt(project, fileName, position);
+        if (!target) return undefined;
+        const locations = target.source === 'selector' ? [target] : selectorLocations(project, target);
+        if (!locations.length) return undefined;
+        const definitions = locations.map(location => ({
+          fileName: location.fileName,
+          textSpan: span(location),
+          kind: ts.ScriptElementKind.string,
+          name: target.name,
+          containerKind: ts.ScriptElementKind.unknown,
+          containerName: '',
+        }));
+        return {definitions, textSpan: span(target)};
+      });
+
+    const span = location => ({start: location.start, length: location.end - location.start});
 
     const proxy = Object.create(null);
     for (const key of Object.keys(service)) proxy[key] = (...args) => service[key](...args);
@@ -63,20 +86,15 @@ function init({typescript: ts}) {
         fullDisplayName: target.name,
         kind: ts.ScriptElementKind.string,
         kindModifiers: '',
-        triggerSpan: {start: target.start, length: target.end - target.start},
+        triggerSpan: span(target),
       };
     };
 
     proxy.findRenameLocations = (fileName, position, ...rest) => {
       const rename = selectorUses(fileName, position);
       if (!rename) return service.findRenameLocations(fileName, position, ...rest);
-      return rename.locations.map(location => ({
-        fileName: location.fileName,
-        textSpan: {start: location.start, length: location.end - location.start},
-      }));
+      return rename.locations.map(location => ({fileName: location.fileName, textSpan: span(location)}));
     };
-
-    const span = location => ({start: location.start, length: location.end - location.start});
 
     proxy.getReferencesAtPosition = (fileName, position, ...rest) => {
       const uses = selectorUses(fileName, position);
@@ -88,7 +106,7 @@ function init({typescript: ts}) {
       const uses = selectorUses(fileName, position);
       if (!uses) return service.findReferences(fileName, position, ...rest);
       const {target, locations} = uses;
-      const [declaration] = selectorLocations(project, target);
+      const [declaration] = locations;
       const definition = {
         fileName: declaration.fileName,
         textSpan: span(declaration),

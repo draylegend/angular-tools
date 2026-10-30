@@ -12,7 +12,10 @@ const path = require('node:path');
 const NAME = /[A-Za-z][\w.:-]*/y;
 const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'out', 'coverage', 'tmp']);
 
-/** Files with an extension under the roots, without dependencies and build output. */
+/**
+ * Files with an extension under the roots, without dependencies, build output
+ * and symbolic links, which could lead outside the roots.
+ */
 function findFiles(roots, extension) {
   const files = [];
   const walk = dir => {
@@ -23,7 +26,7 @@ function findFiles(roots, extension) {
       return;
     }
     for (const entry of entries) {
-      if (entry.name.startsWith('.') || SKIPPED_DIRS.has(entry.name)) continue;
+      if (entry.name.startsWith('.') || SKIPPED_DIRS.has(entry.name) || entry.isSymbolicLink()) continue;
       const fileName = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(fileName);
       else if (entry.name.endsWith(extension)) files.push(fileName);
@@ -31,6 +34,26 @@ function findFiles(roots, extension) {
   };
   roots.forEach(walk);
   return files;
+}
+
+/**
+ * Whether a file really lies under one of the roots, after resolving symbolic
+ * links, so that a `templateUrl` such as `../../secret.html` in a cloned
+ * project cannot make a rename read or edit files elsewhere.
+ */
+function containedIn(roots) {
+  const real = fileName => {
+    try {
+      return fs.realpathSync(fileName);
+    } catch {
+      return undefined;
+    }
+  };
+  const bases = roots.map(real).filter(Boolean);
+  return fileName => {
+    const file = real(fileName);
+    return file !== undefined && bases.some(base => file === base || file.startsWith(base.endsWith(path.sep) ? base : base + path.sep));
+  };
 }
 
 /**
@@ -84,7 +107,11 @@ function scanTemplate(text) {
         continue;
       }
       i = scanAttributes(text, i, names);
-      if (/^(script|style)$/i.test(tag[0])) i = skipPast(text, i, `</${tag[0]}`) - tag[0].length - 2;
+      if (/^(script|style)$/i.test(tag[0])) {
+        // Skip raw text up to the closing tag, or to the end while it is unclosed.
+        const close = text.indexOf(`</${tag[0]}`, i);
+        i = close < 0 ? text.length : close;
+      }
     } else {
       i++;
     }
@@ -207,7 +234,9 @@ function shift(name, offset) {
  * all components and in other HTML files of the project, such as the
  * `index.html` that hosts the root component. Rename and find references use
  * them. Returns undefined when no component or directive declares that name,
- * so the language service can handle it. `project.htmlFiles()` lists the HTML files.
+ * so the language service can handle it. `project.htmlFiles()` lists the HTML
+ * files, and `project.contains(fileName)` limits external templates to the
+ * project.
  */
 function renameLocations(project, target) {
   const same = name => name.kind === target.kind && name.name === target.name;
@@ -223,6 +252,7 @@ function renameLocations(project, target) {
   }
   const seen = new Set();
   for (const template of templates) {
+    if (template.text === undefined && !project.contains(template.fileName)) continue;
     const text = template.text !== undefined ? template.text : project.readFile(template.fileName);
     if (text === undefined) continue;
     for (const name of scanTemplate(text).filter(same)) {
@@ -257,6 +287,7 @@ function selectorLocations(project, target) {
 }
 
 module.exports = {
+  containedIn,
   declarations,
   findFiles,
   parseSelector,

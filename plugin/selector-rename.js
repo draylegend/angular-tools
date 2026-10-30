@@ -2,7 +2,8 @@
 // templates. The official language service renames neither, so this module
 // finds `selector` strings in `@Component` and `@Directive` decorators, scans
 // inline and external templates for matching tag and attribute names, and
-// reports every location as an offset range in its file.
+// reports every location as an offset range in its file. For go to
+// definition it finds the selector strings that declare a tag or attribute.
 'use strict';
 
 const fs = require('node:fs');
@@ -162,7 +163,8 @@ function declarations(ts, sourceFile) {
 
 /**
  * The selector name at an offset, or undefined when the offset is not on a
- * selector string, a tag name or an attribute name.
+ * selector string, a tag name or an attribute name. `source` tells whether
+ * the name is in a `selector` string or in a template.
  * `project` provides `sourceFiles()`, `readFile(fileName)` and `ts`.
  */
 function targetAt(project, fileName, offset) {
@@ -171,7 +173,7 @@ function targetAt(project, fileName, offset) {
   if (!/\.[cm]?tsx?$/.test(fileName)) {
     const text = project.readFile(fileName);
     const hit = text === undefined ? undefined : scanTemplate(text).find(within);
-    return hit && {...hit, fileName};
+    return hit && {...hit, fileName, source: 'template'};
   }
   const sourceFile = project.sourceFiles().find(file => file.fileName === fileName);
   if (!sourceFile) return undefined;
@@ -179,11 +181,11 @@ function targetAt(project, fileName, offset) {
     const {selector, template} = declaration;
     if (selector) {
       const hit = parseSelector(selector.text).map(name => shift(name, selector.offset)).find(within);
-      if (hit) return {...hit, fileName};
+      if (hit) return {...hit, fileName, source: 'selector'};
     }
     if (template && template.text !== undefined) {
       const hit = scanTemplate(template.text).map(name => shift(name, template.offset)).find(within);
-      if (hit) return {...hit, fileName};
+      if (hit) return {...hit, fileName, source: 'template'};
     }
   }
   return undefined;
@@ -201,23 +203,13 @@ function shift(name, offset) {
  * handle it. `project.htmlFiles()` lists the HTML files.
  */
 function renameLocations(project, target) {
-  const {ts} = project;
   const same = name => name.kind === target.kind && name.name === target.name;
-  const locations = [];
-  const templates = [];
-  let declared = false;
-  for (const sourceFile of project.sourceFiles()) {
-    for (const {selector, template} of declarations(ts, sourceFile)) {
-      if (selector) {
-        for (const name of parseSelector(selector.text).filter(same)) {
-          declared = true;
-          locations.push({fileName: sourceFile.fileName, ...shift(name, selector.offset)});
-        }
-      }
-      if (template) templates.push(template);
-    }
-  }
-  if (!declared) return undefined;
+  const locations = selectorLocations(project, target);
+  if (!locations.length) return undefined;
+  const templates = project
+    .sourceFiles()
+    .flatMap(sourceFile => declarations(project.ts, sourceFile).map(({template}) => template))
+    .filter(Boolean);
   const external = new Set(templates.filter(template => template.text === undefined).map(template => template.fileName));
   for (const fileName of project.htmlFiles()) {
     if (!external.has(fileName)) templates.push({fileName, offset: 0});
@@ -238,4 +230,31 @@ function renameLocations(project, target) {
   return locations;
 }
 
-module.exports = {declarations, findFiles, parseSelector, renameLocations, scanTemplate, targetAt};
+/**
+ * The names in `selector` strings that declare the target, which is where go
+ * to definition leads from a tag or an attribute.
+ */
+function selectorLocations(project, target) {
+  const locations = [];
+  for (const sourceFile of project.sourceFiles()) {
+    for (const {selector} of declarations(project.ts, sourceFile)) {
+      if (!selector) continue;
+      for (const name of parseSelector(selector.text)) {
+        if (name.kind === target.kind && name.name === target.name) {
+          locations.push({fileName: sourceFile.fileName, ...shift(name, selector.offset)});
+        }
+      }
+    }
+  }
+  return locations;
+}
+
+module.exports = {
+  declarations,
+  findFiles,
+  parseSelector,
+  renameLocations,
+  scanTemplate,
+  selectorLocations,
+  targetAt,
+};

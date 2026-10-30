@@ -126,7 +126,8 @@ impl zed::Extension for AngularToolsExtension {
         Self::install_plugin()?;
         let work_dir = env::current_dir().map_err(|error| error.to_string())?;
         let probe_locations = format!("{},{}", work_dir.to_string_lossy(), worktree.root_path());
-        // The proxy starts the server and adds selector renames in templates.
+        // The proxy starts the server and answers rename and go to definition
+        // on selector names in HTML.
         let proxy = work_dir.join(format!(
             "{PLUGIN_DIR}/node_modules/{PLUGIN_PACKAGE}/ngserver-proxy.js"
         ));
@@ -159,7 +160,7 @@ impl zed::Extension for AngularToolsExtension {
         Self::install_plugin()?;
         let work_dir = env::current_dir().map_err(|error| error.to_string())?;
         // The extension's plugin comes last, so it wraps the Angular one and
-        // adds selector renames on top of it.
+        // answers selector requests on top of it.
         Ok(Some(serde_json::json!({
             "vtsls": {
                 "tsserver": {

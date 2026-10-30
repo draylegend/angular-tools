@@ -24,6 +24,8 @@ In TypeScript files, Zed's TypeScript server vtsls does the work: in Angular pro
 
 The official language service does not rename selectors, so the extension adds its own small tsserver plugin: renaming `app-card` or `[app-highlight]` in a `selector` string or in a template updates the selector and every matching tag or attribute in all templates and other HTML files of the project, such as `index.html`. In HTML templates a small proxy in front of the server answers these renames.
 
+Ctrl-click on a component tag or a directive attribute opens the selector that declares it, such as `selector: 'app-card'`, in templates and in HTML pages that host a component, such as `index.html`. The server would open the class and does not know such pages, so the proxy and the plugin answer these requests.
+
 ## Development
 
 In Zed, run `zed: install dev extension` and select this directory.

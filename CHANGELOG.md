@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.0
+
+- Changed go to definition on a component tag or directive attribute to open the selector that declares it instead of the class, with the whole name underlined on Ctrl-hover.
+- Added go to definition from component tags in HTML pages that host them, such as `index.html`.
+
 ## 0.14.1
 
 - Fixed selector renames to also update HTML pages that host a component, such as `index.html`.

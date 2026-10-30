@@ -1,7 +1,13 @@
 const assert = require('node:assert');
 const test = require('node:test');
 const ts = require('typescript');
-const {parseSelector, renameLocations, scanTemplate, targetAt} = require('../plugin/selector-rename.js');
+const {
+  parseSelector,
+  renameLocations,
+  scanTemplate,
+  selectorLocations,
+  targetAt,
+} = require('../plugin/selector-rename.js');
 
 const names = list => list.map(({kind, name}) => `${kind} ${name}`);
 
@@ -86,6 +92,22 @@ test('a root component renames in the HTML page that hosts it', () => {
     ['/index.html', 'app-home'],
     ['/index.html', 'app-home'],
   ]);
+});
+
+test('go to definition leads from a tag or an attribute to its selector', () => {
+  const sources = project(files);
+  const text = fileName => files[fileName];
+  const definition = (fileName, name) => {
+    const target = targetAt(sources, fileName, text(fileName).indexOf(name) + 1);
+    return [target.source, selectorLocations(sources, target).map(({fileName, start, end}) => [fileName, start, text(fileName).slice(start, end)])];
+  };
+  const homeSelector = ['/app/home.ts', text('/app/home.ts').indexOf('app-home'), 'app-home'];
+  const cardSelector = ['/app/card.ts', text('/app/card.ts').indexOf('app-card'), 'app-card'];
+  const highlightSelector = ['/app/highlight.ts', text('/app/highlight.ts').indexOf('app-highlight'), 'app-highlight'];
+  assert.deepEqual(definition('/index.html', 'app-home'), ['template', [homeSelector]]);
+  assert.deepEqual(definition('/app/home.html', 'app-card'), ['template', [cardSelector]]);
+  assert.deepEqual(definition('/app/card.ts', 'app-highlight>'), ['template', [highlightSelector]]);
+  assert.equal(definition('/app/card.ts', "'app-card'")[0], 'selector');
 });
 
 test('names that no selector declares are left to other rename providers', () => {

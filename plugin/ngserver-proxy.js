@@ -1,5 +1,7 @@
-// Runs the Angular Language Server and answers rename requests on selector
-// names in templates, which the server cannot rename. Every other message
+// Runs the Angular Language Server and answers two requests on selector names
+// in HTML: rename, which the server cannot do, and go to definition, which
+// leads to the selector string instead of the class and also works in pages
+// such as `index.html` that the server does not know. Every other message
 // passes through unchanged.
 // Usage: node ngserver-proxy.js <server entry> <server arguments...>
 'use strict';
@@ -8,7 +10,7 @@ const {spawn} = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const {fileURLToPath, pathToFileURL} = require('node:url');
-const {findFiles, renameLocations, targetAt} = require('./selector-rename.js');
+const {findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
 
 const [serverEntry, ...serverArgs] = process.argv.slice(2);
 const ts = require(require.resolve('typescript', {paths: [path.dirname(serverEntry)]}));
@@ -92,15 +94,50 @@ function sourceFiles() {
   });
 }
 
-function selectorRename(params) {
+const project = {ts, sourceFiles, readFile, htmlFiles: () => findFiles(roots, '.html')};
+
+function selectorAt(params) {
   const fileName = fileURLToPath(params.textDocument.uri);
   if (/\.[cm]?tsx?$/.test(fileName)) return undefined;
   const text = readFile(fileName);
   if (text === undefined) return undefined;
-  const project = {ts, sourceFiles, readFile, htmlFiles: () => findFiles(roots, '.html')};
   const target = targetAt(project, fileName, toOffset(text, params.position));
-  const locations = target && renameLocations(project, target);
-  return locations && {target, text, locations};
+  return target && {fileName, target, text};
+}
+
+function selectorRename(params) {
+  const selector = selectorAt(params);
+  const locations = selector && renameLocations(project, selector.target);
+  return locations && {...selector, locations};
+}
+
+/**
+ * The selector strings that declare a tag or attribute, as links whose origin
+ * covers the whole name, so the editor underlines `app-root` rather than one
+ * word of it.
+ */
+function selectorDefinition(params) {
+  const selector = selectorAt(params);
+  if (!selector) return undefined;
+  const locations = selectorLocations(project, selector.target);
+  if (!locations.length) return undefined;
+  const starts = lineStarts(selector.text);
+  const originSelectionRange = {
+    start: toPosition(starts, selector.target.start),
+    end: toPosition(starts, selector.target.end),
+  };
+  return locations.map(toLocation).map(({uri, range}) => ({
+    originSelectionRange,
+    targetUri: uri,
+    targetRange: range,
+    targetSelectionRange: range,
+  }));
+}
+
+function toLocation(location) {
+  const starts = lineStarts(readFile(location.fileName) ?? '');
+  const range = {start: toPosition(starts, location.start), end: toPosition(starts, location.end)};
+  return {uri: pathToFileURL(location.fileName).href, range};
 }
 
 frames(process.stdin, (message, frame) => {
@@ -127,14 +164,14 @@ frames(process.stdin, (message, frame) => {
       const rename = selectorRename(params);
       if (rename) {
         const changes = {};
-        for (const location of rename.locations) {
-          const starts = lineStarts(readFile(location.fileName) ?? '');
-          const uri = pathToFileURL(location.fileName).href;
-          const range = {start: toPosition(starts, location.start), end: toPosition(starts, location.end)};
+        for (const {uri, range} of rename.locations.map(toLocation)) {
           (changes[uri] ??= []).push({range, newText: params.newName});
         }
         return reply(id, {changes});
       }
+    } else if (method === 'textDocument/definition') {
+      const links = selectorDefinition(params);
+      if (links) return reply(id, links);
     }
   } catch (error) {
     process.stderr.write(`angular-tools: ${error.stack ?? error}\n`);

@@ -1,9 +1,11 @@
-// A tsserver plugin that renames Angular selectors. Load it after
-// @angular/language-service, so it wraps the Angular-aware language service
-// and only answers rename requests on selector names.
+// A tsserver plugin for Angular selectors. Load it after
+// @angular/language-service, so it wraps the Angular-aware language service.
+// It answers rename on selector names, and go to definition on tags and
+// attributes in inline templates, which leads to the declaring selector string
+// instead of the class. Every other request passes through.
 'use strict';
 
-const {findFiles, renameLocations, targetAt} = require('./selector-rename.js');
+const {findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
 
 function init({typescript: ts}) {
   function create(info) {
@@ -26,6 +28,22 @@ function init({typescript: ts}) {
       const target = targetAt(project, fileName, position);
       const locations = target && renameLocations(project, target);
       return locations && {target, locations};
+    };
+
+    const selectorDefinition = (fileName, position) => {
+      const target = targetAt(project, fileName, position);
+      if (!target || target.source !== 'template') return undefined;
+      const locations = selectorLocations(project, target);
+      if (!locations.length) return undefined;
+      const definitions = locations.map(location => ({
+        fileName: location.fileName,
+        textSpan: {start: location.start, length: location.end - location.start},
+        kind: ts.ScriptElementKind.string,
+        name: target.name,
+        containerKind: ts.ScriptElementKind.unknown,
+        containerName: '',
+      }));
+      return {definitions, textSpan: {start: target.start, length: target.end - target.start}};
     };
 
     const proxy = Object.create(null);
@@ -53,6 +71,12 @@ function init({typescript: ts}) {
         textSpan: {start: location.start, length: location.end - location.start},
       }));
     };
+
+    proxy.getDefinitionAndBoundSpan = (fileName, position, ...rest) =>
+      selectorDefinition(fileName, position) ?? service.getDefinitionAndBoundSpan(fileName, position, ...rest);
+
+    proxy.getDefinitionAtPosition = (fileName, position, ...rest) =>
+      selectorDefinition(fileName, position)?.definitions ?? service.getDefinitionAtPosition(fileName, position, ...rest);
 
     return proxy;
   }

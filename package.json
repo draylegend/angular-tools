@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "scripts": {
+    "pretest": "node -e \"require('fs').mkdirSync('target/tests', {recursive: true})\" && tree-sitter build --wasm --output target/tests/angular.wasm grammars/angular",
+    "test": "node --test tests/"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "0.27.1",
+    "web-tree-sitter": "0.27.1"
+  }
+}

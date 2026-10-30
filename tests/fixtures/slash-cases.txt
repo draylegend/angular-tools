@@ -1,0 +1,161 @@
+close
+<r-button‸
+====
+close
+<div>
+  <r-button‸
+</div>
+====
+close
+<div>
+  <r-button class="a"‸
+</div>
+====
+close
+<div>
+  <r-button disabled‸
+</div>
+====
+close
+<div>
+  <r-button ‸
+</div>
+====
+close
+<div>
+  <r-button [x]="y" (click)="go()"‸
+</div>
+====
+close
+<div>
+  <r-button [x]="y"‸
+  <p>t</p>
+</div>
+====
+close
+<div>
+  <r-button
+    class="a"‸
+</div>
+====
+close
+@if (a) {
+  <r-button‸
+}
+====
+close
+@for (item of items; track item.id) {
+  <app-card [item]="item"‸
+}
+<p>x</p>
+====
+close
+<r-button‸
+<p>x</p>
+====
+plain
+<p>a‸</p>
+====
+plain
+<p>‸</p>
+====
+plain
+<p>‸
+====
+plain
+<div>
+  <p>‸
+</div>
+====
+plain
+<li>‸</li>
+====
+plain
+<r-button‸></r-button>
+====
+plain
+<div>
+  <‸
+</div>
+====
+plain
+<‸
+====
+plain
+<div></div‸
+====
+plain
+<p>{{ a ‸ }}</p>
+====
+plain
+<p>{{ a ‸}}</p>
+====
+plain
+<r-button [x]="a ‸" />
+====
+plain
+<r-button [x]="a‸"></r-button>
+====
+plain
+<r-button (click)="a ‸"></r-button>
+====
+plain
+<a href="x‸">y</a>
+====
+plain
+<a href="‸"></a>
+====
+plain
+<!-- a ‸ -->
+====
+plain
+@if (a ‸) {
+}
+====
+plain
+@if (a) {
+  text ‸
+}
+====
+plain
+text ‸
+====
+plain
+<p>a</p>
+‸
+====
+plain
+@let x = a ‸;
+====
+close
+@if (a) {
+  <r-button class="x"‸
+}
+====
+close
+@if (a) {
+  <r-button disabled‸
+}
+<p>x</p>
+====
+plain
+@if (a) {
+  </div‸
+}
+====
+plain
+@if (a) {
+  <r-button class="x‸"
+}
+====
+plain
+<p *ngIf="a ‸"></p>
+====
+plain
+<p [@fade]="a ‸"></p>
+====
+plain
+<p [(value)]="a ‸"></p>
+====
+close
+<p *ngIf="a"‸

@@ -2,3 +2,4 @@
 /target/
 /grammars/
 *.wasm
+/node_modules/

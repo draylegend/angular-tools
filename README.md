@@ -24,6 +24,13 @@ Like the official VS Code client, the server starts for every HTML and TypeScrip
 
 In Zed, run `zed: install dev extension` and select this directory.
 
+The tests check the queries against the grammar that the dev install checks out into `grammars/angular`:
+
+```sh
+npm install
+npm test
+```
+
 ## License
 
 [MIT](LICENSE)

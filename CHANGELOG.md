@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.0
+
+- Added find references for component and directive selectors, so Ctrl-click on a selector string, now underlined on Ctrl-hover, lists every tag and attribute that uses it, including `index.html`.
+
 ## 0.15.0
 
 - Changed go to definition on a component tag or directive attribute to open the selector that declares it instead of the class, with the whole name underlined on Ctrl-hover.

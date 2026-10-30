@@ -126,8 +126,8 @@ impl zed::Extension for AngularToolsExtension {
         Self::install_plugin()?;
         let work_dir = env::current_dir().map_err(|error| error.to_string())?;
         let probe_locations = format!("{},{}", work_dir.to_string_lossy(), worktree.root_path());
-        // The proxy starts the server and answers rename and go to definition
-        // on selector names in HTML.
+        // The proxy starts the server and answers rename, find references and
+        // go to definition on selector names in HTML.
         let proxy = work_dir.join(format!(
             "{PLUGIN_DIR}/node_modules/{PLUGIN_PACKAGE}/ngserver-proxy.js"
         ));

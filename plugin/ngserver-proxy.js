@@ -1,8 +1,8 @@
-// Runs the Angular Language Server and answers two requests on selector names
-// in HTML: rename, which the server cannot do, and go to definition, which
-// leads to the selector string instead of the class and also works in pages
-// such as `index.html` that the server does not know. Every other message
-// passes through unchanged.
+// Runs the Angular Language Server and answers three requests on selector
+// names in HTML: rename and find references, which the server cannot do, and
+// go to definition, which leads to the selector string instead of the class.
+// All three also work in pages such as `index.html` that the server does not
+// know. Every other message passes through unchanged.
 // Usage: node ngserver-proxy.js <server entry> <server arguments...>
 'use strict';
 
@@ -105,7 +105,8 @@ function selectorAt(params) {
   return target && {fileName, target, text};
 }
 
-function selectorRename(params) {
+/** Every use of the selector name at a position, for rename and references. */
+function selectorUses(params) {
   const selector = selectorAt(params);
   const locations = selector && renameLocations(project, selector.target);
   return locations && {...selector, locations};
@@ -154,14 +155,14 @@ frames(process.stdin, (message, frame) => {
     } else if (method === 'textDocument/didClose') {
       documents.delete(fileURLToPath(params.textDocument.uri));
     } else if (method === 'textDocument/prepareRename') {
-      const rename = selectorRename(params);
+      const rename = selectorUses(params);
       if (rename) {
         const starts = lineStarts(rename.text);
         const range = {start: toPosition(starts, rename.target.start), end: toPosition(starts, rename.target.end)};
         return reply(id, {range, placeholder: rename.target.name});
       }
     } else if (method === 'textDocument/rename') {
-      const rename = selectorRename(params);
+      const rename = selectorUses(params);
       if (rename) {
         const changes = {};
         for (const {uri, range} of rename.locations.map(toLocation)) {
@@ -169,6 +170,9 @@ frames(process.stdin, (message, frame) => {
         }
         return reply(id, {changes});
       }
+    } else if (method === 'textDocument/references') {
+      const uses = selectorUses(params);
+      if (uses) return reply(id, uses.locations.map(toLocation));
     } else if (method === 'textDocument/definition') {
       const links = selectorDefinition(params);
       if (links) return reply(id, links);

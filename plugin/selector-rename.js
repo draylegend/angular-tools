@@ -198,9 +198,9 @@ function shift(name, offset) {
 /**
  * Every location of a selector name: in selector strings, in the templates of
  * all components and in other HTML files of the project, such as the
- * `index.html` that hosts the root component. Returns undefined when no
- * component or directive declares that name, so other rename providers can
- * handle it. `project.htmlFiles()` lists the HTML files.
+ * `index.html` that hosts the root component. Rename and find references use
+ * them. Returns undefined when no component or directive declares that name,
+ * so the language service can handle it. `project.htmlFiles()` lists the HTML files.
  */
 function renameLocations(project, target) {
   const same = name => name.kind === target.kind && name.name === target.name;

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.1
+
+- Fixed selector renames to also update HTML pages that host a component, such as `index.html`.
+
 ## 0.14.0
 
 - Added renaming of component and directive selectors from HTML templates.

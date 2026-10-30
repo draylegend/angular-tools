@@ -5,9 +5,32 @@
 // reports every location as an offset range in its file.
 'use strict';
 
+const fs = require('node:fs');
 const path = require('node:path');
 
 const NAME = /[A-Za-z][\w.:-]*/y;
+const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'out', 'coverage', 'tmp']);
+
+/** Files with an extension under the roots, without dependencies and build output. */
+function findFiles(roots, extension) {
+  const files = [];
+  const walk = dir => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.') || SKIPPED_DIRS.has(entry.name)) continue;
+      const fileName = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(fileName);
+      else if (entry.name.endsWith(extension)) files.push(fileName);
+    }
+  };
+  roots.forEach(walk);
+  return files;
+}
 
 /**
  * Element names and attribute names in a selector such as `app-card`,
@@ -171,9 +194,11 @@ function shift(name, offset) {
 }
 
 /**
- * Every location of a selector name: in selector strings and in the templates
- * of all components. Returns undefined when no component or directive
- * declares that name, so other rename providers can handle it.
+ * Every location of a selector name: in selector strings, in the templates of
+ * all components and in other HTML files of the project, such as the
+ * `index.html` that hosts the root component. Returns undefined when no
+ * component or directive declares that name, so other rename providers can
+ * handle it. `project.htmlFiles()` lists the HTML files.
  */
 function renameLocations(project, target) {
   const {ts} = project;
@@ -193,6 +218,10 @@ function renameLocations(project, target) {
     }
   }
   if (!declared) return undefined;
+  const external = new Set(templates.filter(template => template.text === undefined).map(template => template.fileName));
+  for (const fileName of project.htmlFiles()) {
+    if (!external.has(fileName)) templates.push({fileName, offset: 0});
+  }
   const seen = new Set();
   for (const template of templates) {
     const text = template.text !== undefined ? template.text : project.readFile(template.fileName);
@@ -209,4 +238,4 @@ function renameLocations(project, target) {
   return locations;
 }
 
-module.exports = {declarations, parseSelector, renameLocations, scanTemplate, targetAt};
+module.exports = {declarations, findFiles, parseSelector, renameLocations, scanTemplate, targetAt};

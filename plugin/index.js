@@ -3,7 +3,7 @@
 // and only answers rename requests on selector names.
 'use strict';
 
-const {renameLocations, targetAt} = require('./selector-rename.js');
+const {findFiles, renameLocations, targetAt} = require('./selector-rename.js');
 
 function init({typescript: ts}) {
   function create(info) {
@@ -20,6 +20,7 @@ function init({typescript: ts}) {
         if (snapshot) return snapshot.getText(0, snapshot.getLength());
         return (host.readFile ?? ts.sys.readFile)(fileName);
       },
+      htmlFiles: () => findFiles([info.project.getCurrentDirectory()], '.html'),
     };
     const selectorRename = (fileName, position) => {
       const target = targetAt(project, fileName, position);

@@ -8,7 +8,7 @@ const {spawn} = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const {fileURLToPath, pathToFileURL} = require('node:url');
-const {renameLocations, targetAt} = require('./selector-rename.js');
+const {findFiles, renameLocations, targetAt} = require('./selector-rename.js');
 
 const [serverEntry, ...serverArgs] = process.argv.slice(2);
 const ts = require(require.resolve('typescript', {paths: [path.dirname(serverEntry)]}));
@@ -77,26 +77,10 @@ function readFile(fileName) {
   }
 }
 
-const SKIPPED = new Set(['node_modules', 'dist', 'out', 'coverage', 'tmp']);
 const parsed = new Map();
 
 function sourceFiles() {
-  const files = [];
-  const walk = dir => {
-    let entries;
-    try {
-      entries = fs.readdirSync(dir, {withFileTypes: true});
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.name.startsWith('.') || SKIPPED.has(entry.name)) continue;
-      const fileName = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(fileName);
-      else if (/\.ts$/.test(entry.name) && !entry.name.endsWith('.d.ts')) files.push(fileName);
-    }
-  };
-  roots.forEach(walk);
+  const files = findFiles(roots, '.ts').filter(fileName => !fileName.endsWith('.d.ts'));
   return files.flatMap(fileName => {
     const text = readFile(fileName);
     if (text === undefined) return [];
@@ -113,7 +97,7 @@ function selectorRename(params) {
   if (/\.[cm]?tsx?$/.test(fileName)) return undefined;
   const text = readFile(fileName);
   if (text === undefined) return undefined;
-  const project = {ts, sourceFiles, readFile};
+  const project = {ts, sourceFiles, readFile, htmlFiles: () => findFiles(roots, '.html')};
   const target = targetAt(project, fileName, toOffset(text, params.position));
   const locations = target && renameLocations(project, target);
   return locations && {target, text, locations};

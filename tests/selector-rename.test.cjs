@@ -41,7 +41,8 @@ function project(files) {
   const sourceFiles = Object.entries(files)
     .filter(([fileName]) => fileName.endsWith('.ts'))
     .map(([fileName, text]) => ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true));
-  return {ts, sourceFiles: () => sourceFiles, readFile: fileName => files[fileName]};
+  const htmlFiles = () => Object.keys(files).filter(fileName => fileName.endsWith('.html'));
+  return {ts, sourceFiles: () => sourceFiles, readFile: fileName => files[fileName], htmlFiles};
 }
 
 const files = {
@@ -49,6 +50,7 @@ const files = {
   '/app/card.ts': "@Component({ selector: 'app-card', template: '<p app-highlight>card</p>' })\nexport class Card {}\n",
   '/app/home.ts': "@Component({ selector: 'app-home', templateUrl: './home.html' })\nexport class Home {}\n",
   '/app/home.html': '<app-card app-highlight></app-card>\n<app-cards></app-cards>\n',
+  '/index.html': '<body><app-home></app-home></body>\n',
 };
 
 test('a selector renames with its uses in inline and external templates', () => {
@@ -72,6 +74,17 @@ test('a tag in a template renames the component selector and both tags', () => {
     ['/app/card.ts', files['/app/card.ts'].indexOf('app-card')],
     ['/app/home.html', 1],
     ['/app/home.html', files['/app/home.html'].indexOf('/app-card>') + 1],
+  ]);
+});
+
+test('a root component renames in the HTML page that hosts it', () => {
+  const sources = project(files);
+  const target = targetAt(sources, '/app/home.ts', files['/app/home.ts'].indexOf('app-home'));
+  const found = renameLocations(sources, target).map(({fileName, start, end}) => [fileName, files[fileName].slice(start, end)]);
+  assert.deepEqual(found, [
+    ['/app/home.ts', 'app-home'],
+    ['/index.html', 'app-home'],
+    ['/index.html', 'app-home'],
   ]);
 });
 

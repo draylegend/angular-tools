@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.16.2
 
 - Fixed a hang of the Angular Language Server and of TypeScript features on a template with an unclosed `<script>` or `<style>` tag.

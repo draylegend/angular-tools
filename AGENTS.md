@@ -20,12 +20,16 @@ A mismatch found in history that is not yet pushed is fixed in the commit that i
 
 ## Versioning
 
-The version follows [semantic versioning](https://semver.org). A commit that changes user-facing behaviour bumps the version in that same commit:
+The version follows [semantic versioning](https://semver.org) and names a release: what users install from the Zed extension registry.
 
-- **New capability — minor**: 0.3.0 → 0.4.0.
-- **Fix of existing behaviour — patch**: 0.4.0 → 0.4.1.
+A commit that adds, changes or removes user-facing behaviour keeps the version and adds one line to the `## Unreleased` section at the top of `CHANGELOG.md`, in the past tense, like Zed's release notes. Documentation, tests, tooling and refactoring without behaviour changes add nothing.
+
+A release is its own commit, made only when the maintainer asks for it. The most significant change in `Unreleased` sets the version:
+
+- **New capability — minor**: 0.16.2 → 0.17.0.
+- **Only fixes of existing behaviour — patch**: 0.16.2 → 0.16.3.
 - **Incompatible change**: in 0.x a new minor that describes the incompatibility and the migration in the changelog; from 1.0.0 a new major.
 
-Documentation, tests, tooling and refactoring without behaviour changes keep the version.
+The release commit updates together `extension.toml`, the package version in `Cargo.toml` and `Cargo.lock`, and renames `## Unreleased` to `## X.Y.Z - YYYY-MM-DD`. It gets the tag `vX.Y.Z` and a GitHub release with the same changelog section.
 
-On a bump, update together `extension.toml`, the package version in `Cargo.toml` and `Cargo.lock`, and add the version to `CHANGELOG.md`: one short line per change in the past tense, like Zed's release notes.
+Versions 0.0.0 to 0.16.2 were numbered per change before the first release. They stay in the changelog as history and have no tags.

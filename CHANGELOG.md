@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Changed the Angular Language Server to the project's own one when its `node_modules` has it, and otherwise to the latest server of the project's Angular major version instead of always 22.2.3.
+
 ## 0.16.2
 
 - Fixed a hang of the Angular Language Server and of TypeScript features on a template with an unclosed `<script>` or `<style>` tag.

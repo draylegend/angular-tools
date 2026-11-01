@@ -3,7 +3,7 @@
 // go to definition, which leads to the selector string instead of the class.
 // All three also work in pages such as `index.html` that the server does not
 // know. Every other message passes through unchanged.
-// Usage: node ngserver-proxy.js <server entry> <server arguments...>
+// Usage: node ngserver-proxy.js <project root> <fallback server entry> <server arguments...>
 'use strict';
 
 const {spawn} = require('node:child_process');
@@ -12,9 +12,29 @@ const path = require('node:path');
 const {fileURLToPath, pathToFileURL} = require('node:url');
 const {containedIn, findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
 
-const [serverEntry, ...serverArgs] = process.argv.slice(2);
-const ts = require(require.resolve('typescript', {paths: [path.dirname(serverEntry)]}));
-const server = spawn(process.execPath, [serverEntry, ...serverArgs], {stdio: ['pipe', 'pipe', 'inherit']});
+const [projectRoot, fallbackEntry, ...serverArgs] = process.argv.slice(2);
+// The project's own server comes first, with the project's TypeScript and
+// @angular/language-service. Otherwise the extension's server for the
+// project's Angular version runs with its own language service and the
+// project's TypeScript, since servers before 22 do not bring one.
+const projectEntry = path.join(projectRoot, 'node_modules/@angular/language-server/index.js');
+const serverEntry = fs.existsSync(projectEntry) ? projectEntry : fallbackEntry;
+const serverDir = path.dirname(serverEntry);
+const ngProbeLocations = serverEntry === projectEntry ? [projectRoot, serverDir] : [serverDir];
+const tsProbeLocations = [projectRoot, serverDir];
+const ts = require(require.resolve('typescript', {paths: tsProbeLocations}));
+const server = spawn(
+  process.execPath,
+  [
+    serverEntry,
+    '--tsProbeLocations',
+    tsProbeLocations.join(','),
+    '--ngProbeLocations',
+    ngProbeLocations.join(','),
+    ...serverArgs,
+  ],
+  {stdio: ['pipe', 'pipe', 'inherit']},
+);
 server.on('exit', code => process.exit(code ?? 0));
 
 const documents = new Map();

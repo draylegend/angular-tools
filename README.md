@@ -16,12 +16,11 @@ Typing `/` at the end of an unfinished opening tag closes it: `<app-card` become
 
 ## Language server
 
-The extension installs the official [`@angular/language-server`](https://www.npmjs.com/package/@angular/language-server) with Zed's Node.js. The server package pins its own TypeScript and `@angular/language-service`.
+The extension runs the official [`@angular/language-server`](https://www.npmjs.com/package/@angular/language-server) with Zed's Node.js. When the project has its own server in `node_modules`, that one runs with the project's TypeScript and `@angular/language-service`. Otherwise the extension installs the latest server of the project's Angular major version, read from `@angular/core` in `package.json`, and runs it with its own `@angular/language-service` and the project's TypeScript. Projects on Angular 10 or older, or with a version that names no number, get server 22. Each major version is installed once and kept, so projects on different Angular versions work side by side.
 
 Like the official VS Code client, the server starts for every HTML file, so external templates work without any settings. In projects without `@angular/core` the server turns itself off.
 
-In TypeScript files, Zed's TypeScript server vtsls does the work: in Angular projects the extension loads the same `@angular/language-service` into it as a tsserver plugin. Inline templates get completion, diagnostics and navigation, and renaming a component member also updates its templates.
-
+In TypeScript files, Zed's TypeScript server vtsls does the work: in Angular projects the extension loads the `@angular/language-service` of the installed server for the project's Angular version into it as a tsserver plugin. Inline templates get completion, diagnostics and navigation, and renaming a component member also updates its templates.
 The official language service does not rename selectors, so the extension adds its own small tsserver plugin: renaming `app-card` or `[app-highlight]` in a `selector` string or in a template updates the selector and every matching tag or attribute in all templates and other HTML files of the project, such as `index.html`. Files outside the project, including targets of symbolic links and of a `templateUrl` that points elsewhere, are never read or edited. In HTML templates a small proxy in front of the server answers these renames; in projects without `@angular/core` it only passes messages through.
 
 Ctrl-click on a component tag or a directive attribute opens the selector that declares it, such as `selector: 'app-card'`, in templates and in HTML pages that host a component, such as `index.html`. The server would open the class and does not know such pages, so the proxy and the plugin answer these requests.

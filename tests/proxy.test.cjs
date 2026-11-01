@@ -9,6 +9,7 @@ const frame = body => `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}
 test('the proxy survives malformed frames and keeps passing messages through', async () => {
   const proxy = spawn(process.execPath, [
     path.join(__dirname, '../plugin/ngserver-proxy.js'),
+    __dirname,
     path.join(__dirname, 'fixtures/echo-server.cjs'),
   ]);
   const replies = [];

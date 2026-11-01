@@ -6,12 +6,13 @@ const test = require('node:test');
 const ts = require('typescript');
 const init = require('../plugin/index.js');
 
-function create({program, projectKind, currentDirectory = '/'}) {
+function create({program, projectKind, currentDirectory = '/', service: methods = {}}) {
   const log = [];
   const service = {
     getProgram: program,
     getRenameInfo: () => 'renamed by the language service',
     findRenameLocations: () => 'located by the language service',
+    ...methods,
   };
   const info = {
     languageService: service,
@@ -52,4 +53,32 @@ test('a project without tsconfig searches no HTML files', () => {
   } finally {
     fs.rmSync(dir, {recursive: true, force: true});
   }
+});
+
+test('find references leads to templates instead of generated type-check files', () => {
+  const source = 'export class Home {\n  items = [];\n}\n';
+  const sourceFile = ts.createSourceFile('/app/home.ts', source, ts.ScriptTarget.Latest, true);
+  const position = source.indexOf('items');
+  const declaration = {fileName: '/app/home.ts', textSpan: {start: position, length: 5}, isWriteAccess: true};
+  const {plugin} = create({
+    program: () => ({getSourceFiles: () => [sourceFile]}),
+    projectKind: ts.server.ProjectKind.Inferred,
+    service: {
+      findReferences: () => [
+        {
+          definition: {fileName: '/app/home.ts', textSpan: declaration.textSpan},
+          references: [declaration, {fileName: '/app/home.ngtypecheck.ts', textSpan: {start: 300, length: 5}, isWriteAccess: false}],
+        },
+      ],
+      getReferencesAtPosition: () => [declaration, {fileName: '/app/home.html', textSpan: {start: 14, length: 5}, isWriteAccess: false}],
+    },
+  });
+  const [symbol] = plugin.findReferences('/app/home.ts', position);
+  assert.deepEqual(
+    symbol.references.map(({fileName, textSpan}) => [fileName, textSpan.start]),
+    [
+      ['/app/home.ts', position],
+      ['/app/home.html', 14],
+    ],
+  );
 });

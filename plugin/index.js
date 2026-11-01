@@ -73,6 +73,30 @@ function init({typescript: ts}) {
 
     const span = location => ({start: location.start, length: location.end - location.start});
 
+    // The Angular language service maps uses in templates back to the
+    // templates only in getReferencesAtPosition. findReferences, which
+    // tsserver answers find references with, leaves them in the generated
+    // type-check file, such as `home.ngtypecheck.ts`, so they are replaced
+    // with the mapped ones.
+    const isTypeCheckFile = fileName => fileName.endsWith('.ngtypecheck.ts');
+    const templateReferences = (fileName, position, symbols) =>
+      attempt(() => {
+        if (!symbols?.some(symbol => symbol.references.some(reference => isTypeCheckFile(reference.fileName)))) {
+          return symbols;
+        }
+        const key = reference => `${reference.fileName}:${reference.textSpan.start}`;
+        const result = symbols
+          .map(symbol => ({...symbol, references: symbol.references.filter(reference => !isTypeCheckFile(reference.fileName))}))
+          .filter(symbol => symbol.references.length);
+        const known = new Set(result.flatMap(symbol => symbol.references.map(key)));
+        const mapped = (service.getReferencesAtPosition(fileName, position) ?? []).filter(
+          reference => !isTypeCheckFile(reference.fileName) && !known.has(key(reference)),
+        );
+        if (!result.length || !mapped.length) return result;
+        result[0] = {...result[0], references: [...result[0].references, ...mapped]};
+        return result;
+      }) ?? symbols;
+
     const proxy = Object.create(null);
     for (const key of Object.keys(service)) proxy[key] = (...args) => service[key](...args);
 
@@ -104,7 +128,7 @@ function init({typescript: ts}) {
 
     proxy.findReferences = (fileName, position, ...rest) => {
       const uses = selectorUses(fileName, position);
-      if (!uses) return service.findReferences(fileName, position, ...rest);
+      if (!uses) return templateReferences(fileName, position, service.findReferences(fileName, position, ...rest));
       const {target, locations} = uses;
       const [declaration] = locations;
       const definition = {

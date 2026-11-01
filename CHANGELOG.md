@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Changed the Angular Language Server to the project's own one when its `node_modules` has it, and otherwise to the latest server of the project's Angular major version instead of always 22.2.3.
+- Fixed find references on a component member in TypeScript leading to an empty generated `.ngtypecheck.ts` file instead of its uses in templates.
 
 ## 0.16.2
 

@@ -6,6 +6,7 @@
 - Added Emmet abbreviations in inline `template:` strings of components.
 - Added Tailwind class completion in files of the Angular language.
 - Added completion of plain HTML tags and attributes in files of the Angular language and in inline `template:` strings.
+- Added Tailwind class completion in bindings such as `[class.flex]`.
 
 ## 0.17.0 - 2026-11-01
 

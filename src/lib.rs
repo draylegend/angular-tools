@@ -20,6 +20,8 @@ const EMMET_PATH: &str = "node_modules/@olrtg/emmet-language-server/dist/index.j
 // Tailwind server does not cover. Its settings apply here too.
 const TAILWIND_SERVER_ID: &str = "angular-tools-tailwind";
 const TAILWIND_ZED_SERVER: &str = "tailwindcss-language-server";
+// Tailwind does not read the class name in a binding such as `[class.flex]`.
+const TAILWIND_CLASS_BINDING: &str = r"\[class\.([^\]=\s]*)";
 const TAILWIND_PACKAGE: &str = "@tailwindcss/language-server";
 const TAILWIND_VERSION: &str = "0.16.0";
 const TAILWIND_PATH: &str =
@@ -327,7 +329,8 @@ impl zed::Extension for AngularToolsExtension {
 
     /// Loads the Angular language service and the extension's own plugin into
     /// vtsls as tsserver plugins, so TypeScript features such as rename also
-    /// cover templates and selectors.
+    /// cover templates and selectors, and teaches both Tailwind servers class
+    /// bindings. Zed adds this to the array of the user's own settings.
     fn language_server_additional_workspace_configuration(
         &mut self,
         language_server_id: &LanguageServerId,
@@ -337,9 +340,17 @@ impl zed::Extension for AngularToolsExtension {
         if language_server_id.as_ref() == EMMET_SERVER_ID
             || language_server_id.as_ref() == TAILWIND_SERVER_ID
             || language_server_id.as_ref() == HTML_SERVER_ID
-            || target_language_server_id.as_ref() != "vtsls"
             || !is_angular_worktree(worktree)
         {
+            return Ok(None);
+        }
+        let target = target_language_server_id.as_ref();
+        if target == TAILWIND_ZED_SERVER || target == TAILWIND_SERVER_ID {
+            return Ok(Some(serde_json::json!({
+                "tailwindCSS": { "experimental": { "classRegex": [TAILWIND_CLASS_BINDING] } },
+            })));
+        }
+        if target != "vtsls" {
             return Ok(None);
         }
         let major = angular_major(worktree);

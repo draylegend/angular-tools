@@ -36,8 +36,8 @@ languages = ["Angular"]
 
 [language_servers.angular-tools-html]
 name = "HTML for Angular templates"
-# The Angular Language Server leaves out plain HTML tags and attributes. In
-# TypeScript files this server answers only inside `template:` strings.
+# The Angular Language Server leaves out plain HTML and CSS. In TypeScript files
+# this server answers only inside `template:` strings.
 languages = ["Angular", "TypeScript"]
 
 [language_servers.angular-tools-html.language_ids]

@@ -33,12 +33,14 @@ const TAILWIND_PACKAGE: &str = "@tailwindcss/language-server";
 const TAILWIND_VERSION: &str = "0.16.0";
 const TAILWIND_PATH: &str =
     "node_modules/@tailwindcss/language-server/bin/tailwindcss-language-server";
-// Completes plain HTML tags and attributes in files of the Angular language and
-// in inline templates, which the Angular Language Server leaves out.
+// Completes plain HTML tags and attributes and CSS in files of the Angular
+// language and in inline templates, which the Angular Language Server leaves out.
 const HTML_SERVER_ID: &str = "angular-tools-html";
 const HTML_PACKAGE: &str = "vscode-html-languageservice";
 const HTML_VERSION: &str = "5.6.2";
 const HTML_PATH: &str = "node_modules/vscode-html-languageservice/lib/umd/htmlLanguageService.js";
+const CSS_PACKAGE: &str = "vscode-css-languageservice";
+const CSS_VERSION: &str = "6.3.10";
 // The extension's own tsserver plugin and server proxies, written into the
 // work directory.
 const PLUGIN_PACKAGE: &str = "angular-tools";
@@ -219,6 +221,11 @@ impl AngularToolsExtension {
             && zed::npm_package_installed_version(HTML_PACKAGE)?.as_deref() != Some(HTML_VERSION)
         {
             zed::npm_install_package(HTML_PACKAGE, HTML_VERSION)?;
+        }
+        if project.angular
+            && zed::npm_package_installed_version(CSS_PACKAGE)?.as_deref() != Some(CSS_VERSION)
+        {
+            zed::npm_install_package(CSS_PACKAGE, CSS_VERSION)?;
         }
         let work_dir = env::current_dir().map_err(|error| error.to_string())?;
         let server = work_dir.join(format!(

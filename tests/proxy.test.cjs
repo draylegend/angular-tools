@@ -367,3 +367,46 @@ test('the proxy renames a plain tag without its angle brackets', async () => {
     fs.rmSync(dir, {recursive: true, force: true});
   }
 });
+
+test('the HTML server answers CSS in styles and hovers on plain HTML', async () => {
+  const {frames} = require('../plugin/lsp.js');
+  const server = spawn(process.execPath, [
+    path.join(__dirname, '../plugin/html-server.js'),
+    path.join(__dirname, '..'),
+    require.resolve('vscode-html-languageservice'),
+  ]);
+  const replies = new Map();
+  const done = new Promise(resolve => {
+    frames(server.stdout, message => {
+      replies.set(message.id, message.result);
+      if (replies.size === 8) resolve();
+    });
+  });
+  const send = message => server.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', ...message})));
+  const uri = pathToFileURL(path.join(__dirname, 'a.html')).href;
+  const ts = pathToFileURL(path.join(__dirname, 'a.ts')).href;
+  const open = (uri, text) => send({method: 'textDocument/didOpen', params: {textDocument: {uri, languageId: 'html', version: 1, text}}});
+  const ask = (id, method, uri, line, character) => send({id, method: 'textDocument/' + method, params: {textDocument: {uri}, position: {line, character}}});
+  send({id: 1, method: 'initialize', params: {}});
+  open(uri, '<style>a { col }</style>\n<p style="color"></p>\n<p [style]="col" title="col"></p>\n<div></div>\n');
+  open(ts, '@Component({template: `<p style="col"></p>`})\nexport class A {}\n');
+  ask(2, 'completion', uri, 0, 14);
+  ask(3, 'completion', uri, 1, 13);
+  ask(4, 'completion', uri, 2, 15);
+  ask(5, 'hover', uri, 3, 2);
+  ask(6, 'hover', uri, 1, 11);
+  ask(7, 'completion', ts, 0, 36);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  ask(8, 'hover', uri, 2, 5);
+  await done;
+  send({method: 'exit'});
+  const labels = id => replies.get(id).items.map(item => item.label);
+  assert.ok(labels(2).includes('color'));
+  assert.ok(labels(3).includes('color'));
+  assert.equal(replies.get(3).items.find(item => item.label === 'color').kind, undefined);
+  assert.deepEqual(replies.get(4).items, []);
+  assert.match(JSON.stringify(replies.get(5).contents), /div/);
+  assert.match(JSON.stringify(replies.get(6).contents), /color|col/);
+  assert.ok(labels(7).includes('color'));
+  assert.equal(replies.get(8), null);
+});

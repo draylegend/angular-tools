@@ -8,6 +8,9 @@ const FIRST_SERVER_MAJOR: u32 = 11;
 const DEFAULT_SERVER_MAJOR: u32 = 22;
 // Installed with the server; the package is also a tsserver plugin.
 const SERVICE_PACKAGE: &str = "@angular/language-service";
+// Formats templates in projects that do not have their own Prettier.
+const PRETTIER_PACKAGE: &str = "prettier";
+const PRETTIER_VERSION: &str = "3.9.10";
 // Expands Emmet abbreviations in inline templates.
 const EMMET_SERVER_ID: &str = "angular-tools-emmet";
 const EMMET_PACKAGE: &str = "@olrtg/emmet-language-server";
@@ -87,6 +90,15 @@ impl AngularToolsExtension {
             &zed::LanguageServerInstallationStatus::None,
         );
         self.ready_majors.insert(major);
+        Ok(())
+    }
+
+    fn install_prettier() -> Result<()> {
+        if zed::npm_package_installed_version(PRETTIER_PACKAGE)?.as_deref()
+            != Some(PRETTIER_VERSION)
+        {
+            zed::npm_install_package(PRETTIER_PACKAGE, PRETTIER_VERSION)?;
+        }
         Ok(())
     }
 
@@ -190,11 +202,14 @@ impl zed::Extension for AngularToolsExtension {
         let major = angular_major(worktree);
         self.install_server(language_server_id, major)?;
         Self::install_plugin()?;
+        if is_angular_worktree(worktree) {
+            Self::install_prettier()?;
+        }
         let work_dir = env::current_dir().map_err(|error| error.to_string())?;
         // The proxy starts the project's own server or, without one, the
-        // installed server for the project's Angular version, and answers
+        // installed server for the project's Angular version, answers
         // rename, find references and go to definition on selector names in
-        // HTML.
+        // HTML, and formats templates.
         let proxy = work_dir.join(format!(
             "{PLUGIN_DIR}/node_modules/{PLUGIN_PACKAGE}/ngserver-proxy.js"
         ));

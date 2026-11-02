@@ -134,6 +134,28 @@ function selectorDefinition(params) {
   }));
 }
 
+// Formats templates with Prettier's Angular parser: the project's Prettier
+// and configuration when it has them, otherwise the Prettier installed with
+// the extension and the editor's indentation. Zed hands formatting to the
+// language server for languages without its own Prettier support, such as
+// Angular, so templates format without a formatter setting.
+let initializeId;
+
+async function format(params) {
+  const fileName = fileURLToPath(params.textDocument.uri);
+  const text = documents.get(fileName);
+  if (text === undefined) return null;
+  const prettier = require(require.resolve('prettier', {paths: [projectRoot, __dirname]}));
+  const {ignored} = await prettier.getFileInfo(fileName, {ignorePath: path.join(projectRoot, '.prettierignore')});
+  if (ignored) return [];
+  const config = await prettier.resolveConfig(fileName, {editorconfig: true});
+  const indentation = config ? {} : {tabWidth: params.options.tabSize, useTabs: !params.options.insertSpaces};
+  const formatted = await prettier.format(text, {...indentation, ...config, filepath: fileName, parser: 'angular'});
+  if (formatted === text) return [];
+  const starts = lineStarts(text);
+  return [{range: {start: {line: 0, character: 0}, end: toPosition(starts, text.length)}, newText: formatted}];
+}
+
 function toLocation(location) {
   const starts = lineStarts(readFile(location.fileName) ?? '');
   const range = {start: toPosition(starts, location.start), end: toPosition(starts, location.end)};
@@ -148,6 +170,7 @@ frames(process.stdin, (message, frame) => {
       roots = folders.map(uri => fileURLToPath(uri));
       angular = roots.some(isAngularWorkspace);
       project.contains = containedIn(roots);
+      initializeId = id;
     } else if (method === 'textDocument/didOpen') {
       documents.set(fileURLToPath(params.textDocument.uri), params.textDocument.text);
     } else if (method === 'textDocument/didChange') {
@@ -177,6 +200,15 @@ frames(process.stdin, (message, frame) => {
     } else if (method === 'textDocument/definition') {
       const links = selectorDefinition(params);
       if (links) return reply(id, links);
+    } else if (method === 'textDocument/formatting' && angular) {
+      format(params).then(
+        edits => reply(id, edits),
+        error => {
+          process.stderr.write(`angular-tools: ${error.stack ?? error}\n`);
+          reply(id, null);
+        },
+      );
+      return;
     }
   } catch (error) {
     process.stderr.write(`angular-tools: ${error.stack ?? error}\n`);
@@ -184,5 +216,11 @@ frames(process.stdin, (message, frame) => {
   server.stdin.write(frame);
 });
 
-frames(server.stdout, (_message, frame) => process.stdout.write(frame));
+frames(server.stdout, (message, frame) => {
+  if (angular && initializeId !== undefined && message?.id === initializeId && message.result?.capabilities) {
+    message.result.capabilities.documentFormattingProvider = true;
+    frame = encode(message);
+  }
+  process.stdout.write(frame);
+});
 process.stdin.on('end', () => server.stdin.end());

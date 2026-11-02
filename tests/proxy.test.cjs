@@ -1,4 +1,6 @@
 const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
 const {spawn} = require('node:child_process');
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
@@ -37,6 +39,44 @@ test('the proxy survives malformed frames and keeps passing messages through', a
       [2, 'textDocument/hover'],
     ],
   );
+});
+
+test('the proxy formats templates in Angular workspaces with the Angular parser', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'angular-tools-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'angular.json'), '{}');
+    const proxy = spawn(process.execPath, [
+      path.join(__dirname, '../plugin/ngserver-proxy.js'),
+      dir,
+      path.join(__dirname, 'fixtures/echo-server.cjs'),
+    ]);
+    const replies = [];
+    let output = '';
+    const done = new Promise((resolve, reject) => {
+      proxy.stdout.on('data', chunk => {
+        output += chunk;
+        for (;;) {
+          const match = /Content-Length: (\d+)\r\n\r\n/.exec(output);
+          if (!match || Buffer.byteLength(output.slice(match.index + match[0].length)) < Number(match[1])) break;
+          const body = output.slice(match.index + match[0].length, match.index + match[0].length + Number(match[1]));
+          replies.push(JSON.parse(body));
+          output = output.slice(match.index + match[0].length + body.length);
+        }
+        if (replies.length === 2) resolve();
+      });
+      proxy.on('exit', code => reject(new Error(`proxy exited with ${code}`)));
+    });
+    const uri = pathToFileURL(path.join(dir, 'app.html')).href;
+    const send = message => proxy.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', ...message})));
+    send({id: 1, method: 'initialize', params: {rootUri: pathToFileURL(dir).href}});
+    send({method: 'textDocument/didOpen', params: {textDocument: {uri, languageId: 'html', version: 1, text: '@if (a) {\n<p   >{{a}}</p>\n  }\n'}}});
+    send({id: 2, method: 'textDocument/formatting', params: {textDocument: {uri}, options: {tabSize: 2, insertSpaces: true}}});
+    await done;
+    proxy.stdin.end();
+    assert.deepEqual(replies[1].result.map(edit => edit.newText), ['@if (a) {\n  <p>{{ a }}</p>\n}\n']);
+  } finally {
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
 });
 
 test('the Emmet proxy forwards completion only inside inline templates', async () => {

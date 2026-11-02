@@ -10,6 +10,7 @@ const {spawn} = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const {fileURLToPath, pathToFileURL} = require('node:url');
+const {applyChanges, encode, frames, lineStarts, toOffset, toPosition} = require('./lsp.js');
 const {containedIn, findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
 
 const [projectRoot, fallbackEntry, ...serverArgs] = process.argv.slice(2);
@@ -40,67 +41,8 @@ server.on('exit', code => process.exit(code ?? 0));
 const documents = new Map();
 let roots = [];
 
-// Splits a stream into LSP frames. A header without a length is dropped, and a
-// body that is not JSON reaches the handler as undefined, so it can still be
-// passed on unchanged.
-function frames(stream, onMessage) {
-  let buffer = Buffer.alloc(0);
-  stream.on('data', chunk => {
-    buffer = Buffer.concat([buffer, chunk]);
-    for (;;) {
-      const headerEnd = buffer.indexOf('\r\n\r\n');
-      if (headerEnd < 0) return;
-      const length = /content-length:\s*(\d+)/i.exec(buffer.subarray(0, headerEnd).toString('ascii'))?.[1];
-      if (length === undefined) {
-        buffer = buffer.subarray(headerEnd + 4);
-        continue;
-      }
-      const end = headerEnd + 4 + Number(length);
-      if (buffer.length < end) return;
-      const frame = buffer.subarray(0, end);
-      let message;
-      try {
-        message = JSON.parse(buffer.subarray(headerEnd + 4, end).toString('utf8'));
-      } catch {
-        message = undefined;
-      }
-      onMessage(message, frame);
-      buffer = buffer.subarray(end);
-    }
-  });
-}
-
 function reply(id, result) {
-  const body = Buffer.from(JSON.stringify({jsonrpc: '2.0', id, result}), 'utf8');
-  process.stdout.write(Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, 'ascii'), body]));
-}
-
-function lineStarts(text) {
-  const starts = [0];
-  for (let i = 0; i < text.length; i++) if (text[i] === '\n') starts.push(i + 1);
-  return starts;
-}
-
-function toOffset(text, {line, character}) {
-  const starts = lineStarts(text);
-  return Math.min((starts[line] ?? text.length) + character, text.length);
-}
-
-function toPosition(starts, offset) {
-  let line = 0;
-  while (line + 1 < starts.length && starts[line + 1] <= offset) line++;
-  return {line, character: offset - starts[line]};
-}
-
-function applyChanges(text, changes) {
-  for (const change of changes) {
-    if (!change.range) {
-      text = change.text;
-      continue;
-    }
-    text = text.slice(0, toOffset(text, change.range.start)) + change.text + text.slice(toOffset(text, change.range.end));
-  }
-  return text;
+  process.stdout.write(encode({jsonrpc: '2.0', id, result}));
 }
 
 function readFile(fileName) {

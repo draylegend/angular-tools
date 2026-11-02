@@ -17,6 +17,15 @@ languages = ["Angular", "HTML"]
 "Angular" = "html"
 "HTML" = "html"
 
+[language_servers.angular-tools-emmet]
+name = "Emmet for Angular inline templates"
+# The Emmet extension does not cover TypeScript files. This server answers only
+# inside `template:` strings of components, which it sees as HTML.
+languages = ["TypeScript"]
+
+[language_servers.angular-tools-emmet.language_ids]
+"TypeScript" = "html"
+
 [grammars.angular]
 repository = "https://github.com/dlvandenberg/tree-sitter-angular"
 rev = "38a8014ed5452cd6b7cf1399c00177a1f5374256"

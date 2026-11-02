@@ -8,13 +8,19 @@ const FIRST_SERVER_MAJOR: u32 = 11;
 const DEFAULT_SERVER_MAJOR: u32 = 22;
 // Installed with the server; the package is also a tsserver plugin.
 const SERVICE_PACKAGE: &str = "@angular/language-service";
-// The extension's own tsserver plugin and server proxy, written into the
+// Expands Emmet abbreviations in inline templates.
+const EMMET_SERVER_ID: &str = "angular-tools-emmet";
+const EMMET_PACKAGE: &str = "@olrtg/emmet-language-server";
+const EMMET_VERSION: &str = "2.8.0";
+const EMMET_PATH: &str = "node_modules/@olrtg/emmet-language-server/dist/index.js";
+// The extension's own tsserver plugin and server proxies, written into the
 // work directory.
 const PLUGIN_PACKAGE: &str = "angular-tools";
 const PLUGIN_DIR: &str = "plugin";
-const PLUGIN_FILES: [(&str, &str); 4] = [
+const PLUGIN_FILES: [(&str, &str); 6] = [
     ("package.json", include_str!("../plugin/package.json")),
     ("index.js", include_str!("../plugin/index.js")),
+    ("lsp.js", include_str!("../plugin/lsp.js")),
     (
         "selector-rename.js",
         include_str!("../plugin/selector-rename.js"),
@@ -23,6 +29,7 @@ const PLUGIN_FILES: [(&str, &str); 4] = [
         "ngserver-proxy.js",
         include_str!("../plugin/ngserver-proxy.js"),
     ),
+    ("emmet-proxy.js", include_str!("../plugin/emmet-proxy.js")),
 ];
 
 struct AngularToolsExtension {
@@ -83,7 +90,33 @@ impl AngularToolsExtension {
         Ok(())
     }
 
-    /// Writes the plugin and the proxy into `plugin/node_modules/angular-tools`,
+    /// The Emmet server behind its proxy, which answers only in inline
+    /// templates. Projects without Angular get the proxy alone, which does
+    /// nothing, so they install no server.
+    fn emmet_command(worktree: &zed::Worktree) -> Result<zed::Command> {
+        Self::install_plugin()?;
+        if is_angular_worktree(worktree)
+            && zed::npm_package_installed_version(EMMET_PACKAGE)?.as_deref() != Some(EMMET_VERSION)
+        {
+            zed::npm_install_package(EMMET_PACKAGE, EMMET_VERSION)?;
+        }
+        let work_dir = env::current_dir().map_err(|error| error.to_string())?;
+        let proxy = work_dir.join(format!(
+            "{PLUGIN_DIR}/node_modules/{PLUGIN_PACKAGE}/emmet-proxy.js"
+        ));
+        Ok(zed::Command {
+            command: zed::node_binary_path()?,
+            args: vec![
+                proxy.to_string_lossy().into_owned(),
+                worktree.root_path(),
+                work_dir.join(EMMET_PATH).to_string_lossy().into_owned(),
+                "--stdio".to_string(),
+            ],
+            env: Default::default(),
+        })
+    }
+
+    /// Writes the plugin and the proxies into `plugin/node_modules/angular-tools`,
     /// where tsserver resolves the plugin from the `plugin` probe location.
     fn install_plugin() -> Result<()> {
         let dir = format!("{PLUGIN_DIR}/node_modules/{PLUGIN_PACKAGE}");
@@ -151,6 +184,9 @@ impl zed::Extension for AngularToolsExtension {
         language_server_id: &LanguageServerId,
         worktree: &zed::Worktree,
     ) -> Result<zed::Command> {
+        if language_server_id.as_ref() == EMMET_SERVER_ID {
+            return Self::emmet_command(worktree);
+        }
         let major = angular_major(worktree);
         self.install_server(language_server_id, major)?;
         Self::install_plugin()?;
@@ -188,7 +224,10 @@ impl zed::Extension for AngularToolsExtension {
         target_language_server_id: &LanguageServerId,
         worktree: &zed::Worktree,
     ) -> Result<Option<serde_json::Value>> {
-        if target_language_server_id.as_ref() != "vtsls" || !is_angular_worktree(worktree) {
+        if language_server_id.as_ref() == EMMET_SERVER_ID
+            || target_language_server_id.as_ref() != "vtsls"
+            || !is_angular_worktree(worktree)
+        {
             return Ok(None);
         }
         let major = angular_major(worktree);

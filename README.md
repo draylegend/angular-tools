@@ -29,6 +29,8 @@ Renaming a tag in files of the **Angular** language also renames its other half,
 
 Typing `>` after an opening tag adds its closing tag, except for void elements such as `<input>`, as Zed's `use_on_type_format` setting allows. In TypeScript files this stays with vtsls. Over a WSL or SSH connection Zed leaves this edit out of the undo history, so `ctrl-z` does not remove the closing tag.
 
+`editor: wrap selections in tag` works, and elements and control flow blocks count as text objects for Vim mode.
+
 Typing `/` at the end of an unfinished opening tag closes it: `<app-card` becomes `<app-card/>`. The caret ends up after `>` in Zed builds that support the `cursor_after_end` bracket option and before it in others.
 
 ## Language server
@@ -57,7 +59,7 @@ Settings of the official VS Code client work the same under `lsp.angular-tools.s
 
 The `suggest` settings and those two options take effect after a restart of the server. The server watches files itself, not through Zed, because Zed sends file changes only to servers that ask for them, and this one leaves that to the VS Code client.
 
-The server also formats files of the **Angular** language with [Prettier](https://prettier.io)'s `angular` parser. It uses the project's Prettier and configuration, including `.prettierignore` and `.editorconfig`, and falls back to the Prettier installed with the extension and Zed's indentation. Zed hands the formatting of this language to its language server, so it needs no formatter setting: `editor: format` works as is, and saving formats when `format_on_save` is on. Only `.component.html` and `.ng.html` files open as Angular by default; other templates, such as `app.html`, need the `file_types` mapping above. Without it they open as HTML and Zed formats them with its own Prettier, whose `html` parser leaves `{{a}}` and the contents of `@if` blocks as they are.
+The server also formats files of the **Angular** language with [Prettier](https://prettier.io)'s `angular` parser. It uses the project's Prettier and configuration, including `.prettierignore` and `.editorconfig`, and falls back to the Prettier installed with the extension and Zed's indentation. Zed hands the formatting of this language to its language server, so it needs no formatter setting: `editor: format` works as is, and saving formats when `format_on_save` is on. Only `.component.html` and `.ng.html` files open as Angular by default; other templates, such as `app.html`, need the `file_types` mapping above. Without it they open as HTML and Zed formats them with its own Prettier, whose `html` parser leaves `{{a}}` and the contents of `@if` blocks as they are. Prettier's `angular` parser ignores ranges, so `format_on_save` set to `modifications` skips these files; `modifications_if_available` formats them whole.
 
 In TypeScript files, Zed's TypeScript server vtsls does the work: in Angular projects the extension loads the `@angular/language-service` of the installed server for the project's Angular version into it as a tsserver plugin. Inline templates get completion, diagnostics and navigation, and renaming a component member also updates its templates. Find references on a member lists its uses in templates; the Angular plugin alone would point them into its generated `.ngtypecheck.ts` files, so the extension's plugin maps them back.
 

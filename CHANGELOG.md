@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added text objects for comments, elements and control flow blocks in files of the Angular language.
+- Added `editor: wrap selections in tag` in files of the Angular language.
 - Added hover for plain HTML tags and attributes, and completion and hover for CSS in `<style>` and `style=""`, in files of the Angular language and in inline `template:` strings.
 - Added editing of both tags of an element together in files of the Angular language.
 - Fixed `editor: rename` on a plain tag, which offered the name with its angle brackets and then renamed nothing.

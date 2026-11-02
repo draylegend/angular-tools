@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.18.0 - 2026-11-02
 
 - Added formatting of files in the Angular language with Prettier's Angular parser, using the project's Prettier and configuration when it has them.
 - Added Emmet abbreviations in inline `template:` strings of components.

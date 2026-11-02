@@ -180,6 +180,23 @@ async function format(params) {
   return [{range: {start: {line: 0, character: 0}, end: toPosition(starts, text.length)}, newText: formatted}];
 }
 
+// Both tags of an element for editing them together, which the server does not
+// answer. The HTML language service comes with the extension's HTML server.
+function linkedEditingRanges(params) {
+  const text = documents.get(fileURLToPath(params.textDocument.uri));
+  if (text === undefined) return undefined;
+  let html;
+  try {
+    html = require(require.resolve('vscode-html-languageservice', {paths: [__dirname]}));
+  } catch {
+    return undefined;
+  }
+  const service = html.getLanguageService();
+  const document = html.TextDocument.create(params.textDocument.uri, 'html', 0, text);
+  const ranges = service.findLinkedEditingRanges(document, params.position, service.parseHTMLDocument(document));
+  return ranges ? {ranges} : null;
+}
+
 function toLocation(location) {
   const starts = lineStarts(readFile(location.fileName) ?? '');
   const range = {start: toPosition(starts, location.start), end: toPosition(starts, location.end)};
@@ -224,6 +241,9 @@ frames(process.stdin, (message, frame) => {
     } else if (method === 'textDocument/definition') {
       const links = selectorDefinition(params);
       if (links) return reply(id, links);
+    } else if (method === 'textDocument/linkedEditingRange' && angular) {
+      const ranges = linkedEditingRanges(params);
+      if (ranges !== undefined) return reply(id, ranges);
     } else if (method === 'textDocument/formatting' && angular) {
       format(params).then(
         edits => reply(id, edits),

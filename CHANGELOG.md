@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added editing of both tags of an element together in files of the Angular language.
+
 ## 0.19.0 - 2026-11-02
 
 - Added support for Angular projects in nested folders of a workspace, such as `apps/web` in a monorepo.

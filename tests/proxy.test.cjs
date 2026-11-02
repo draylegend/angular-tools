@@ -248,3 +248,40 @@ test('the proxy tells the server about the oldest Angular version and its syntax
   assert.ok(!mixed.includes('--disableBlockSyntax') && !mixed.includes('--disableLetSyntax'));
   assert.ok(!(await args({})).includes('--angularCoreVersion'));
 });
+
+test('the proxy links the opening and closing tag of an element', async () => {
+  const {frames} = require('../plugin/lsp.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'angular-tools-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'angular.json'), '{}');
+    const proxy = spawn(process.execPath, [
+      path.join(__dirname, '../plugin/ngserver-proxy.js'),
+      dir,
+      path.join(__dirname, 'fixtures/echo-server.cjs'),
+    ]);
+    const replies = new Map();
+    const done = new Promise(resolve => {
+      frames(proxy.stdout, message => {
+        replies.set(message.id, message.result);
+        if (replies.size === 3) resolve();
+      });
+    });
+    const uri = pathToFileURL(path.join(dir, 'a.html')).href;
+    const send = message => proxy.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', ...message})));
+    const linked = (id, character) =>
+      send({id, method: 'textDocument/linkedEditingRange', params: {textDocument: {uri}, position: {line: 0, character}}});
+    send({id: 1, method: 'initialize', params: {rootUri: pathToFileURL(dir).href}});
+    send({method: 'textDocument/didOpen', params: {textDocument: {uri, languageId: 'html', version: 1, text: '<app-card>x</app-card>'}}});
+    linked(2, 3);
+    linked(3, 10);
+    await done;
+    proxy.stdin.end();
+    assert.deepEqual(replies.get(2).ranges, [
+      {start: {line: 0, character: 1}, end: {line: 0, character: 9}},
+      {start: {line: 0, character: 13}, end: {line: 0, character: 21}},
+    ]);
+    assert.equal(replies.get(3), null);
+  } finally {
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
+});

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.0 - 2026-11-02
 
 - Added support for Angular projects in nested folders of a workspace, such as `apps/web` in a monorepo.
 - Added updates of the installed Angular Language Server within its major version, at most once a day.

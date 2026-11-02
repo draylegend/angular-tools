@@ -10,7 +10,14 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,7 +32,11 @@ jobs:
           git -C grammars/angular checkout --quiet "$rev"
       - run: npm ci
       - run: npm test
-      - run: rustup target add wasm32-wasip2
-      - run: cargo fmt --check
-      - run: cargo clippy --locked --target wasm32-wasip2 -- --deny warnings
-      - run: cargo build --locked --target wasm32-wasip2
+      - if: runner.os == 'Linux'
+        run: rustup target add wasm32-wasip2
+      - if: runner.os == 'Linux'
+        run: cargo fmt --check
+      - if: runner.os == 'Linux'
+        run: cargo clippy --locked --target wasm32-wasip2 -- --deny warnings
+      - if: runner.os == 'Linux'
+        run: cargo build --locked --target wasm32-wasip2

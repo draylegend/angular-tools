@@ -133,7 +133,7 @@ test('names that no selector declares are left to other rename providers', () =>
   assert.equal(renameLocations(sources, target), undefined);
 });
 
-test('renames stay inside the project despite templateUrl and symbolic links', () => {
+test('renames stay inside the project despite templateUrl and symbolic links', t => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'angular-tools-'));
   try {
     const root = path.join(base, 'project');
@@ -142,9 +142,14 @@ test('renames stay inside the project despite templateUrl and symbolic links', (
     fs.mkdirSync(outside);
     fs.writeFileSync(path.join(outside, 'private.html'), '<app-x></app-x>\n');
     fs.writeFileSync(path.join(outside, 'linked.html'), '<app-x></app-x>\n');
-    fs.symlinkSync(path.join(outside, 'linked.html'), path.join(root, 'src/link.html'));
+    try {
+      fs.symlinkSync(path.join(outside, 'linked.html'), path.join(root, 'src/link.html'));
+    } catch (error) {
+      if (error.code !== 'EPERM') throw error;
+      return t.skip('creating symbolic links needs a privilege on Windows');
+    }
     fs.writeFileSync(path.join(root, 'src/page.html'), '<app-x></app-x>\n');
-    const component = path.join(root, 'src/x.ts');
+    const component = path.join(root, 'src/x.ts').replaceAll(path.sep, '/');
     const source = "@Component({ selector: 'app-x', templateUrl: '../../outside/private.html' })\nexport class X {}\n";
     fs.writeFileSync(component, source);
 

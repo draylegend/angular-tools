@@ -37,7 +37,8 @@ test('a failing selector lookup leaves the request to the language service', () 
 test('a project without tsconfig searches no HTML files', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'angular-tools-'));
   try {
-    const component = path.join(dir, 'x.ts');
+    // tsserver names files with forward slashes on every platform.
+    const component = path.join(dir, 'x.ts').replaceAll(path.sep, '/');
     const source = "@Component({ selector: 'app-x', template: '' })\nexport class X {}\n";
     fs.writeFileSync(component, source);
     fs.writeFileSync(path.join(dir, 'page.html'), '<app-x></app-x>\n');

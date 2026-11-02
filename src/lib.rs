@@ -1,9 +1,12 @@
-use std::{collections::HashSet, env, fs};
+use std::{
+    collections::{HashMap, HashSet},
+    env, fs,
+};
 use zed_extension_api::{self as zed, serde_json, LanguageServerId, Result};
 
 const SERVER_PACKAGE: &str = "@angular/language-server";
-// The server's major version follows Angular's from 11 on. Projects that name
-// no such version in package.json get the latest server known to work.
+// The server's major version follows Angular's from 11 on. Projects without
+// such a version get the latest server known to work.
 const FIRST_SERVER_MAJOR: u32 = 11;
 const DEFAULT_SERVER_MAJOR: u32 = 22;
 // Installed with the server; the package is also a tsserver plugin.
@@ -36,7 +39,7 @@ const HTML_PATH: &str = "node_modules/vscode-html-languageservice/lib/umd/htmlLa
 // work directory.
 const PLUGIN_PACKAGE: &str = "angular-tools";
 const PLUGIN_DIR: &str = "plugin";
-const PLUGIN_FILES: [(&str, &str); 9] = [
+const PLUGIN_FILES: [(&str, &str); 10] = [
     ("package.json", include_str!("../plugin/package.json")),
     ("index.js", include_str!("../plugin/index.js")),
     ("lsp.js", include_str!("../plugin/lsp.js")),
@@ -50,12 +53,22 @@ const PLUGIN_FILES: [(&str, &str); 9] = [
     ),
     ("emmet-proxy.js", include_str!("../plugin/emmet-proxy.js")),
     ("no-server.js", include_str!("../plugin/no-server.js")),
+    ("project.js", include_str!("../plugin/project.js")),
     ("template.js", include_str!("../plugin/template.js")),
     ("html-server.js", include_str!("../plugin/html-server.js")),
 ];
 
+/// What the worktree contains, found by `project.js` in nested folders too.
+#[derive(Clone, Copy)]
+struct Project {
+    angular: bool,
+    major: u32,
+    tailwind: bool,
+}
+
 struct AngularToolsExtension {
     ready_majors: HashSet<u32>,
+    projects: HashMap<u64, Project>,
 }
 
 /// Each major version of the server is installed under its own npm alias, so
@@ -124,9 +137,8 @@ impl AngularToolsExtension {
     /// The Emmet server behind its proxy, which answers only in inline
     /// templates. Projects without Angular get the proxy alone, which does
     /// nothing, so they install no server.
-    fn emmet_command(worktree: &zed::Worktree) -> Result<zed::Command> {
-        Self::install_plugin()?;
-        if is_angular_worktree(worktree)
+    fn emmet_command(worktree: &zed::Worktree, project: Project) -> Result<zed::Command> {
+        if project.angular
             && zed::npm_package_installed_version(EMMET_PACKAGE)?.as_deref() != Some(EMMET_VERSION)
         {
             zed::npm_install_package(EMMET_PACKAGE, EMMET_VERSION)?;
@@ -149,13 +161,9 @@ impl AngularToolsExtension {
 
     /// The Tailwind server in projects that use Tailwind. Others get a stand-in
     /// that does nothing, so they install no server.
-    fn tailwind_command(worktree: &zed::Worktree) -> Result<zed::Command> {
-        Self::install_plugin()?;
+    fn tailwind_command(project: Project) -> Result<zed::Command> {
         let work_dir = env::current_dir().map_err(|error| error.to_string())?;
-        let uses_tailwind = worktree
-            .read_text_file("package.json")
-            .is_ok_and(|package| package.contains("\"tailwindcss\""));
-        let args = if uses_tailwind {
+        let args = if project.tailwind {
             if zed::npm_package_installed_version(TAILWIND_PACKAGE)?.as_deref()
                 != Some(TAILWIND_VERSION)
             {
@@ -178,9 +186,8 @@ impl AngularToolsExtension {
 
     /// The HTML completion server. Projects without Angular get it without the
     /// language service, so it does nothing and they install nothing.
-    fn html_command(worktree: &zed::Worktree) -> Result<zed::Command> {
-        Self::install_plugin()?;
-        if is_angular_worktree(worktree)
+    fn html_command(worktree: &zed::Worktree, project: Project) -> Result<zed::Command> {
+        if project.angular
             && zed::npm_package_installed_version(HTML_PACKAGE)?.as_deref() != Some(HTML_VERSION)
         {
             zed::npm_install_package(HTML_PACKAGE, HTML_VERSION)?;
@@ -200,6 +207,14 @@ impl AngularToolsExtension {
         })
     }
 
+    /// Looks through the worktree again and remembers what it found.
+    fn inspect_project(&mut self, worktree: &zed::Worktree) -> Result<Project> {
+        Self::install_plugin()?;
+        let project = run_project_script(worktree).unwrap_or_else(|| root_project(worktree));
+        self.projects.insert(worktree.id(), project);
+        Ok(project)
+    }
+
     /// Writes the plugin and the proxies into `plugin/node_modules/angular-tools`,
     /// where tsserver resolves the plugin from the `plugin` probe location.
     fn install_plugin() -> Result<()> {
@@ -215,19 +230,30 @@ impl AngularToolsExtension {
     }
 }
 
-fn is_angular_worktree(worktree: &zed::Worktree) -> bool {
-    worktree.read_text_file("angular.json").is_ok()
-        || worktree
-            .read_text_file("package.json")
-            .is_ok_and(|package| package.contains("\"@angular/core\""))
+/// Runs `project.js` on the worktree, or gives None when the user does not
+/// grant the extension to run processes.
+fn run_project_script(worktree: &zed::Worktree) -> Option<Project> {
+    let script = env::current_dir().ok()?.join(format!(
+        "{PLUGIN_DIR}/node_modules/{PLUGIN_PACKAGE}/project.js"
+    ));
+    let output = zed::process::Command::new(zed::node_binary_path().ok()?)
+        .arg(script.to_string_lossy())
+        .arg(worktree.root_path())
+        .output()
+        .ok()?;
+    let info: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    Some(Project {
+        angular: info["angular"].as_bool()?,
+        major: server_major(info["major"].as_u64().map(|major| major as u32)),
+        tailwind: info["tailwind"].as_bool()?,
+    })
 }
 
-/// The major version of `@angular/core` in the project's package.json, such
-/// as 21 for `^21.2.0`.
-fn angular_major(worktree: &zed::Worktree) -> u32 {
-    let package = worktree.read_text_file("package.json").unwrap_or_default();
-    let package: serde_json::Value = serde_json::from_str(&package).unwrap_or_default();
-    ["dependencies", "devDependencies"]
+/// What the root package.json and angular.json alone tell about the worktree.
+fn root_project(worktree: &zed::Worktree) -> Project {
+    let text = worktree.read_text_file("package.json").unwrap_or_default();
+    let package: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+    let major = ["dependencies", "devDependencies"]
         .iter()
         .find_map(|field| package[field]["@angular/core"].as_str())
         .and_then(|range| {
@@ -238,7 +264,17 @@ fn angular_major(worktree: &zed::Worktree) -> u32 {
                 .collect::<String>()
                 .parse()
                 .ok()
-        })
+        });
+    Project {
+        angular: worktree.read_text_file("angular.json").is_ok()
+            || text.contains("\"@angular/core\""),
+        major: server_major(major),
+        tailwind: text.contains("\"tailwindcss\""),
+    }
+}
+
+fn server_major(major: Option<u32>) -> u32 {
+    major
         .filter(|major| *major >= FIRST_SERVER_MAJOR)
         .unwrap_or(DEFAULT_SERVER_MAJOR)
 }
@@ -260,6 +296,7 @@ impl zed::Extension for AngularToolsExtension {
     fn new() -> Self {
         Self {
             ready_majors: HashSet::new(),
+            projects: HashMap::new(),
         }
     }
 
@@ -268,19 +305,19 @@ impl zed::Extension for AngularToolsExtension {
         language_server_id: &LanguageServerId,
         worktree: &zed::Worktree,
     ) -> Result<zed::Command> {
+        let project = self.inspect_project(worktree)?;
         if language_server_id.as_ref() == EMMET_SERVER_ID {
-            return Self::emmet_command(worktree);
+            return Self::emmet_command(worktree, project);
         }
         if language_server_id.as_ref() == TAILWIND_SERVER_ID {
-            return Self::tailwind_command(worktree);
+            return Self::tailwind_command(project);
         }
         if language_server_id.as_ref() == HTML_SERVER_ID {
-            return Self::html_command(worktree);
+            return Self::html_command(worktree, project);
         }
-        let major = angular_major(worktree);
+        let major = project.major;
         self.install_server(language_server_id, major)?;
-        Self::install_plugin()?;
-        if is_angular_worktree(worktree) {
+        if project.angular {
             Self::install_prettier()?;
         }
         let work_dir = env::current_dir().map_err(|error| error.to_string())?;
@@ -366,8 +403,14 @@ impl zed::Extension for AngularToolsExtension {
         if language_server_id.as_ref() == EMMET_SERVER_ID
             || language_server_id.as_ref() == TAILWIND_SERVER_ID
             || language_server_id.as_ref() == HTML_SERVER_ID
-            || !is_angular_worktree(worktree)
         {
+            return Ok(None);
+        }
+        let project = match self.projects.get(&worktree.id()) {
+            Some(project) => *project,
+            None => self.inspect_project(worktree)?,
+        };
+        if !project.angular {
             return Ok(None);
         }
         let target = target_language_server_id.as_ref();
@@ -379,9 +422,8 @@ impl zed::Extension for AngularToolsExtension {
         if target != "vtsls" {
             return Ok(None);
         }
-        let major = angular_major(worktree);
+        let major = project.major;
         self.install_server(language_server_id, major)?;
-        Self::install_plugin()?;
         let work_dir = env::current_dir().map_err(|error| error.to_string())?;
         // tsserver resolves the language service upward from the folder of
         // the server for the project's Angular version. The extension's plugin

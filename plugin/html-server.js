@@ -7,6 +7,7 @@
 
 const fs = require('node:fs');
 const {answerNothing, applyChanges, encode, frames, toOffset} = require('./lsp.js');
+const {inspect, resolvePackage} = require('./project.js');
 const {templateOnly} = require('./template.js');
 
 const [projectRoot, serviceEntry] = process.argv.slice(2);
@@ -15,7 +16,7 @@ const reply = (id, result) => process.stdout.write(encode({jsonrpc: '2.0', id, r
 
 function resolveTypeScript() {
   try {
-    return require(require.resolve('typescript', {paths: [projectRoot]}));
+    return require(resolvePackage('typescript', projectRoot, inspect(projectRoot).dirs));
   } catch {
     return undefined;
   }

@@ -11,6 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {fileURLToPath, pathToFileURL} = require('node:url');
 const {applyChanges, encode, frames, lineStarts, toOffset, toPosition} = require('./lsp.js');
+const {inspect, resolvePackage} = require('./project.js');
 const {containedIn, findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
 
 const [projectRoot, fallbackEntry, ...serverArgs] = process.argv.slice(2);
@@ -18,11 +19,15 @@ const [projectRoot, fallbackEntry, ...serverArgs] = process.argv.slice(2);
 // @angular/language-service. Otherwise the extension's server for the
 // project's Angular version runs with its own language service and the
 // project's TypeScript, since servers before 22 do not bring one.
-const projectEntry = path.join(projectRoot, 'node_modules/@angular/language-server/index.js');
-const serverEntry = fs.existsSync(projectEntry) ? projectEntry : fallbackEntry;
+const projectInfo = inspect(projectRoot);
+const projectDirs = [projectRoot, ...projectInfo.dirs.filter(dir => dir !== projectRoot)];
+const projectEntry = projectDirs
+  .map(dir => path.join(dir, 'node_modules/@angular/language-server/index.js'))
+  .find(entry => fs.existsSync(entry));
+const serverEntry = projectEntry ?? fallbackEntry;
 const serverDir = path.dirname(serverEntry);
-const ngProbeLocations = serverEntry === projectEntry ? [projectRoot, serverDir] : [serverDir];
-const tsProbeLocations = [projectRoot, serverDir];
+const ngProbeLocations = projectEntry ? [...projectDirs, serverDir] : [serverDir];
+const tsProbeLocations = [...projectDirs, serverDir];
 const ts = require(require.resolve('typescript', {paths: tsProbeLocations}));
 const server = spawn(
   process.execPath,
@@ -88,10 +93,6 @@ function sourceFiles() {
 // itself off and the proxy only passes messages through.
 let angular = false;
 
-function isAngularWorkspace(root) {
-  return fs.existsSync(path.join(root, 'angular.json')) || (readFile(path.join(root, 'package.json')) ?? '').includes('"@angular/core"');
-}
-
 const project = {ts, sourceFiles, readFile, htmlFiles: () => findFiles(roots, '.html'), contains: () => false};
 
 function selectorAt(params) {
@@ -141,12 +142,21 @@ function selectorDefinition(params) {
 // Angular, so templates format without a formatter setting.
 let initializeId;
 
+// The .prettierignore closest to the file, up to the project root.
+function nearestIgnoreFile(fileName) {
+  let dir = path.dirname(fileName);
+  while (dir !== projectRoot && dir !== path.dirname(dir) && !fs.existsSync(path.join(dir, '.prettierignore'))) {
+    dir = path.dirname(dir);
+  }
+  return path.join(dir, '.prettierignore');
+}
+
 async function format(params) {
   const fileName = fileURLToPath(params.textDocument.uri);
   const text = documents.get(fileName);
   if (text === undefined) return null;
-  const prettier = require(require.resolve('prettier', {paths: [projectRoot, __dirname]}));
-  const {ignored} = await prettier.getFileInfo(fileName, {ignorePath: path.join(projectRoot, '.prettierignore')});
+  const prettier = require(require.resolve('prettier', {paths: [path.dirname(fileName), projectRoot, __dirname]}));
+  const {ignored} = await prettier.getFileInfo(fileName, {ignorePath: nearestIgnoreFile(fileName)});
   if (ignored) return [];
   const config = await prettier.resolveConfig(fileName, {editorconfig: true});
   const indentation = config ? {} : {tabWidth: params.options.tabSize, useTabs: !params.options.insertSpaces};
@@ -168,7 +178,7 @@ frames(process.stdin, (message, frame) => {
     if (method === 'initialize') {
       const folders = params.workspaceFolders?.map(folder => folder.uri) ?? (params.rootUri ? [params.rootUri] : []);
       roots = folders.map(uri => fileURLToPath(uri));
-      angular = roots.some(isAngularWorkspace);
+      angular = projectInfo.angular;
       project.contains = containedIn(roots);
       initializeId = id;
     } else if (method === 'textDocument/didOpen') {

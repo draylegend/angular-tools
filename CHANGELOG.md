@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added support for Angular projects in nested folders of a workspace, such as `apps/web` in a monorepo.
+- Fixed the server choice for `catalog:` and `workspace:` versions of `@angular/core`, which now come from the installed package.
+
 ## 0.18.0 - 2026-11-02
 
 - Added formatting of files in the Angular language with Prettier's Angular parser, using the project's Prettier and configuration when it has them.

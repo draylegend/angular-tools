@@ -44,6 +44,12 @@ languages = ["Angular", "TypeScript"]
 "Angular" = "html"
 "TypeScript" = "html"
 
+# Looks for Angular projects in nested folders, which the extension API cannot list.
+[[capabilities]]
+kind = "process:exec"
+command = "*"
+args = ["*", "*"]
+
 [grammars.angular]
 repository = "https://github.com/dlvandenberg/tree-sitter-angular"
 rev = "38a8014ed5452cd6b7cf1399c00177a1f5374256"

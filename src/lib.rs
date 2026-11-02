@@ -5,6 +5,7 @@ use std::{
 };
 use zed_extension_api::{self as zed, serde_json, LanguageServerId, Result};
 
+const SERVER_ID: &str = "angular-tools";
 const SERVER_PACKAGE: &str = "@angular/language-server";
 // The server's major version follows Angular's from 11 on. Projects without
 // such a version get the latest server known to work.
@@ -306,17 +307,95 @@ fn server_major(major: Option<u32>) -> u32 {
         .unwrap_or(DEFAULT_SERVER_MAJOR)
 }
 
-/// Arguments the official VS Code client passes with its default settings.
-/// The proxy adds the probe locations, where the server looks for TypeScript
-/// and @angular/language-service.
-fn server_args() -> Vec<String> {
-    [
-        "--stdio",
-        "--includeAutomaticOptionalChainCompletions",
-        "--includeCompletionsWithSnippetText",
-    ]
-    .map(String::from)
-    .to_vec()
+/// The user's settings of the server, from `lsp.angular-tools.settings`.
+fn user_settings(worktree: &zed::Worktree) -> serde_json::Value {
+    zed::settings::LspSettings::for_worktree(SERVER_ID, worktree)
+        .ok()
+        .and_then(|settings| settings.settings)
+        .unwrap_or_else(|| serde_json::json!({}))
+}
+
+/// Arguments of the official VS Code client, with the same defaults for its
+/// `angular.*` settings. The proxy adds the probe locations, where the server
+/// looks for TypeScript and @angular/language-service, and what it knows about
+/// the project's Angular versions.
+fn server_args(settings: &serde_json::Value) -> Vec<String> {
+    let angular = &settings["angular"];
+    let enabled = |value: &serde_json::Value| value.as_bool().unwrap_or(true);
+    let mut args = vec!["--stdio".to_string()];
+    if enabled(&angular["suggest"]["includeAutomaticOptionalChainCompletions"]) {
+        args.push("--includeAutomaticOptionalChainCompletions".to_string());
+    }
+    if enabled(&angular["suggest"]["includeCompletionsWithSnippetText"]) {
+        args.push("--includeCompletionsWithSnippetText".to_string());
+    }
+    args.push("--includeCompletionsForModuleExports".to_string());
+    args.push(enabled(&angular["suggest"]["autoImports"]).to_string());
+    if angular["forceStrictTemplates"].as_bool().unwrap_or(false) {
+        args.push("--forceStrictTemplates".to_string());
+    }
+    if let Some(codes) = angular["suppressAngularDiagnosticCodes"]
+        .as_str()
+        .filter(|codes| !codes.is_empty())
+    {
+        args.push("--suppressAngularDiagnosticCodes".to_string());
+        args.push(codes.to_string());
+    }
+    args
+}
+
+/// The defaults of the official client's inlay hint settings, which the server
+/// would otherwise turn on, under the user's own settings.
+fn server_configuration(settings: serde_json::Value) -> serde_json::Value {
+    let mut configuration = serde_json::json!({
+        "angular": {
+            "inlayHints": {
+                "bindingHints": {
+                    "pipeOutputTypes": false,
+                    "propertyBindingTypes": false,
+                    "requiredInputIndicator": "none",
+                    "twoWayBindingSignalTypes": false,
+                },
+                "controlFlowHints": {
+                    "deferTriggerTypes": false,
+                    "switchExpressionTypes": false,
+                },
+                "eventHints": {
+                    "hostListenerArgumentTypes": false,
+                    "parameterTypes": false,
+                },
+                "functionTypes": {
+                    "arrowFunctionParameterTypes": false,
+                    "arrowFunctionReturnTypes": false,
+                },
+                "interaction": { "interactiveInlayHints": false },
+                "parameterHints": {
+                    "nameHints": "all",
+                    "suppressWhenArgumentMatchesName": true,
+                },
+                "variableTypes": {
+                    "forLoopVariableTypes": false,
+                    "ifAliasTypes": false,
+                    "letDeclarationTypes": false,
+                    "referenceVariableTypes": false,
+                    "suppressWhenTypeMatchesName": false,
+                },
+            },
+        },
+    });
+    merge_settings(&mut configuration, settings);
+    configuration
+}
+
+fn merge_settings(target: &mut serde_json::Value, source: serde_json::Value) {
+    match (target, source) {
+        (serde_json::Value::Object(target), serde_json::Value::Object(source)) => {
+            for (key, value) in source {
+                merge_settings(target.entry(key).or_insert(serde_json::Value::Null), value);
+            }
+        }
+        (target, source) => *target = source,
+    }
 }
 
 impl zed::Extension for AngularToolsExtension {
@@ -363,7 +442,7 @@ impl zed::Extension for AngularToolsExtension {
                 .to_string_lossy()
                 .into_owned(),
         ];
-        args.extend(server_args());
+        args.extend(server_args(&user_settings(worktree)));
 
         Ok(zed::Command {
             command: zed::node_binary_path()?,
@@ -398,12 +477,16 @@ impl zed::Extension for AngularToolsExtension {
         })
     }
 
-    /// Zed's settings of its own Tailwind server, with its default for Emmet.
+    /// The Angular server's settings, and for the Tailwind server those of Zed's
+    /// own one, with its default for Emmet.
     fn language_server_workspace_configuration(
         &mut self,
         language_server_id: &LanguageServerId,
         worktree: &zed::Worktree,
     ) -> Result<Option<serde_json::Value>> {
+        if language_server_id.as_ref() == SERVER_ID {
+            return Ok(Some(server_configuration(user_settings(worktree))));
+        }
         if language_server_id.as_ref() != TAILWIND_SERVER_ID {
             return Ok(None);
         }

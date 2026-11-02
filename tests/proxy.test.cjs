@@ -212,3 +212,39 @@ test('the Emmet proxy stays out of opening tags and interpolations', async () =>
   assert.equal(replies.get(2), null);
   assert.equal(replies.get(3), 'textDocument/completion');
 });
+
+test('the proxy tells the server about the oldest Angular version and its syntax', async () => {
+  const {frames} = require('../plugin/lsp.js');
+  const args = async dependencies => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'angular-tools-'));
+    try {
+      fs.mkdirSync(path.join(dir, 'node_modules'));
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({private: true}));
+      for (const [name, version] of Object.entries(dependencies)) {
+        fs.mkdirSync(path.join(dir, name));
+        fs.writeFileSync(path.join(dir, name, 'package.json'), JSON.stringify({dependencies: {'@angular/core': version}}));
+      }
+      const proxy = spawn(process.execPath, [
+        path.join(__dirname, '../plugin/ngserver-proxy.js'),
+        dir,
+        path.join(__dirname, 'fixtures/args-server.cjs'),
+      ]);
+      const result = await new Promise(resolve => {
+        frames(proxy.stdout, message => resolve(message.result.args));
+        proxy.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', id: 1, method: 'initialize', params: {}})));
+      });
+      proxy.stdin.end();
+      return result;
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  };
+  const after = (list, name) => list[list.indexOf(name) + 1];
+  const old = await args({a: '^16.2.0'});
+  assert.equal(after(old, '--angularCoreVersion'), '16.2.0');
+  assert.ok(old.includes('--disableBlockSyntax') && old.includes('--disableLetSyntax'));
+  const mixed = await args({a: '^17.1.0', b: '~22.0.0'});
+  assert.equal(after(mixed, '--angularCoreVersion'), '17.1.0');
+  assert.ok(!mixed.includes('--disableBlockSyntax') && !mixed.includes('--disableLetSyntax'));
+  assert.ok(!(await args({})).includes('--angularCoreVersion'));
+});

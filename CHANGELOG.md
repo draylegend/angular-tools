@@ -4,6 +4,9 @@
 
 - Added support for Angular projects in nested folders of a workspace, such as `apps/web` in a monorepo.
 - Added updates of the installed Angular Language Server within its major version, at most once a day.
+- Added the `angular.*` settings of the official VS Code client under `lsp.angular-tools.settings`, such as `forceStrictTemplates` and inlay hints.
+- Changed inlay hints in templates to the defaults of the official client, which turn most of them off.
+- Changed the server to get the project's Angular version the way the official client does, which keeps old projects from getting syntax they do not support.
 - Fixed the server choice for `catalog:` and `workspace:` versions of `@angular/core`, which now come from the installed package.
 
 ## 0.18.0 - 2026-11-02

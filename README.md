@@ -20,6 +20,26 @@ The extension runs the official [`@angular/language-server`](https://www.npmjs.c
 
 Like the official VS Code client, the server starts for every HTML file, so external templates work without any settings. In projects without `@angular/core` the server turns itself off.
 
+Settings of the official VS Code client work the same under `lsp.angular-tools.settings`, with the same defaults, for example:
+
+```json
+{
+  "lsp": {
+    "angular-tools": {
+      "settings": {
+        "angular": {
+          "forceStrictTemplates": true,
+          "suppressAngularDiagnosticCodes": "2669",
+          "inlayHints": { "variableTypes": { "forLoopVariableTypes": true } }
+        }
+      }
+    }
+  }
+}
+```
+
+The `suggest` settings and those two options take effect after a restart of the server. The server watches files itself, not through Zed, because Zed sends file changes only to servers that ask for them, and this one leaves that to the VS Code client.
+
 The server also formats files of the **Angular** language with [Prettier](https://prettier.io)'s `angular` parser. It uses the project's Prettier and configuration, including `.prettierignore` and `.editorconfig`, and falls back to the Prettier installed with the extension and Zed's indentation. Zed hands the formatting of this language to its language server, so it needs no formatter setting: `editor: format` works as is, and saving formats when `format_on_save` is on. Only `.component.html` and `.ng.html` files open as Angular by default; other templates, such as `app.html`, need the `file_types` mapping above. Without it they open as HTML and Zed formats them with its own Prettier, whose `html` parser leaves `{{a}}` and the contents of `@if` blocks as they are.
 
 In TypeScript files, Zed's TypeScript server vtsls does the work: in Angular projects the extension loads the `@angular/language-service` of the installed server for the project's Angular version into it as a tsserver plugin. Inline templates get completion, diagnostics and navigation, and renaming a component member also updates its templates. Find references on a member lists its uses in templates; the Angular plugin alone would point them into its generated `.ngtypecheck.ts` files, so the extension's plugin maps them back.

@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {fileURLToPath, pathToFileURL} = require('node:url');
 const {applyChanges, encode, frames, lineStarts, toOffset, toPosition} = require('./lsp.js');
-const {inspect, resolvePackage} = require('./project.js');
+const {inspect, versionNumbers} = require('./project.js');
 const {containedIn, findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
 
 const [projectRoot, fallbackEntry, ...serverArgs] = process.argv.slice(2);
@@ -29,6 +29,19 @@ const serverDir = path.dirname(serverEntry);
 const ngProbeLocations = projectEntry ? [...projectDirs, serverDir] : [serverDir];
 const tsProbeLocations = [...projectDirs, serverDir];
 const ts = require(require.resolve('typescript', {paths: tsProbeLocations}));
+
+// What the official client tells the server about the project's Angular: the
+// oldest version for compatibility, and syntax that no version here supports.
+function versionArguments() {
+  const versions = projectInfo.versions.map(versionNumbers);
+  if (!versions.length) return [];
+  const [major, minor = 0, patch = 0] = versions[0];
+  const args = ['--angularCoreVersion', major === 0 ? '999.999.999' : `${major}.${minor}.${patch}`];
+  if (versions.every(([major]) => major < 17)) args.push('--disableBlockSyntax');
+  if (versions.every(([major, minor = 0]) => major < 18 || (major === 18 && minor < 1))) args.push('--disableLetSyntax');
+  return args;
+}
+
 const server = spawn(
   process.execPath,
   [
@@ -37,6 +50,7 @@ const server = spawn(
     tsProbeLocations.join(','),
     '--ngProbeLocations',
     ngProbeLocations.join(','),
+    ...versionArguments(),
     ...serverArgs,
   ],
   {stdio: ['pipe', 'pipe', 'inherit']},

@@ -140,3 +140,43 @@ test('the stand-in server has no capabilities and answers nothing', async () => 
   server.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', method: 'exit'})));
   assert.deepEqual(replies, [{capabilities: {}}, null]);
 });
+
+test('the HTML server completes plain HTML and stays out of Angular syntax and TypeScript', async () => {
+  const {frames} = require('../plugin/lsp.js');
+  const server = spawn(process.execPath, [
+    path.join(__dirname, '../plugin/html-server.js'),
+    path.join(__dirname, '..'),
+    require.resolve('vscode-html-languageservice'),
+  ]);
+  const replies = new Map();
+  const done = new Promise(resolve => {
+    frames(server.stdout, message => {
+      replies.set(message.id, message.result);
+      if (replies.size === 7) resolve();
+    });
+  });
+  const send = message => server.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', ...message})));
+  const open = (uri, text) => send({method: 'textDocument/didOpen', params: {textDocument: {uri, languageId: 'html', version: 1, text}}});
+  const completion = (id, uri, line, character) =>
+    send({id, method: 'textDocument/completion', params: {textDocument: {uri}, position: {line, character}}});
+  const html = pathToFileURL(path.join(__dirname, 'a.html')).href;
+  const ts = pathToFileURL(path.join(__dirname, 'a.ts')).href;
+  send({id: 1, method: 'initialize', params: {}});
+  open(html, '<di></di>\n<p cl></p>\n<p [cl]></p>\n<p>{{ cl }}</p>\n');
+  open(ts, "const other = '<di';\n@Component({template: `<p cl></p>`})\nexport class A {}\n");
+  completion(2, html, 0, 3);
+  completion(3, html, 1, 5);
+  completion(4, html, 2, 6);
+  completion(5, html, 3, 8);
+  completion(6, ts, 1, 27);
+  completion(7, ts, 0, 18);
+  await done;
+  send({method: 'exit'});
+  const labels = id => replies.get(id).items.map(item => item.label);
+  assert.ok(labels(2).includes('div'));
+  assert.ok(labels(3).includes('class'));
+  assert.equal(replies.get(4), null);
+  assert.equal(replies.get(5), null);
+  assert.ok(labels(6).includes('class'));
+  assert.equal(replies.get(7), null);
+});

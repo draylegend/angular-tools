@@ -5,6 +5,7 @@
 - Added formatting of files in the Angular language with Prettier's Angular parser, using the project's Prettier and configuration when it has them.
 - Added Emmet abbreviations in inline `template:` strings of components.
 - Added Tailwind class completion in files of the Angular language.
+- Added completion of plain HTML tags and attributes in files of the Angular language and in inline `template:` strings.
 
 ## 0.17.0 - 2026-11-01
 

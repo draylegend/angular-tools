@@ -24,11 +24,17 @@ const TAILWIND_PACKAGE: &str = "@tailwindcss/language-server";
 const TAILWIND_VERSION: &str = "0.16.0";
 const TAILWIND_PATH: &str =
     "node_modules/@tailwindcss/language-server/bin/tailwindcss-language-server";
+// Completes plain HTML tags and attributes in files of the Angular language and
+// in inline templates, which the Angular Language Server leaves out.
+const HTML_SERVER_ID: &str = "angular-tools-html";
+const HTML_PACKAGE: &str = "vscode-html-languageservice";
+const HTML_VERSION: &str = "5.6.2";
+const HTML_PATH: &str = "node_modules/vscode-html-languageservice/lib/umd/htmlLanguageService.js";
 // The extension's own tsserver plugin and server proxies, written into the
 // work directory.
 const PLUGIN_PACKAGE: &str = "angular-tools";
 const PLUGIN_DIR: &str = "plugin";
-const PLUGIN_FILES: [(&str, &str); 7] = [
+const PLUGIN_FILES: [(&str, &str); 9] = [
     ("package.json", include_str!("../plugin/package.json")),
     ("index.js", include_str!("../plugin/index.js")),
     ("lsp.js", include_str!("../plugin/lsp.js")),
@@ -42,6 +48,8 @@ const PLUGIN_FILES: [(&str, &str); 7] = [
     ),
     ("emmet-proxy.js", include_str!("../plugin/emmet-proxy.js")),
     ("no-server.js", include_str!("../plugin/no-server.js")),
+    ("template.js", include_str!("../plugin/template.js")),
+    ("html-server.js", include_str!("../plugin/html-server.js")),
 ];
 
 struct AngularToolsExtension {
@@ -166,6 +174,30 @@ impl AngularToolsExtension {
         })
     }
 
+    /// The HTML completion server. Projects without Angular get it without the
+    /// language service, so it does nothing and they install nothing.
+    fn html_command(worktree: &zed::Worktree) -> Result<zed::Command> {
+        Self::install_plugin()?;
+        if is_angular_worktree(worktree)
+            && zed::npm_package_installed_version(HTML_PACKAGE)?.as_deref() != Some(HTML_VERSION)
+        {
+            zed::npm_install_package(HTML_PACKAGE, HTML_VERSION)?;
+        }
+        let work_dir = env::current_dir().map_err(|error| error.to_string())?;
+        let server = work_dir.join(format!(
+            "{PLUGIN_DIR}/node_modules/{PLUGIN_PACKAGE}/html-server.js"
+        ));
+        Ok(zed::Command {
+            command: zed::node_binary_path()?,
+            args: vec![
+                server.to_string_lossy().into_owned(),
+                worktree.root_path(),
+                work_dir.join(HTML_PATH).to_string_lossy().into_owned(),
+            ],
+            env: Default::default(),
+        })
+    }
+
     /// Writes the plugin and the proxies into `plugin/node_modules/angular-tools`,
     /// where tsserver resolves the plugin from the `plugin` probe location.
     fn install_plugin() -> Result<()> {
@@ -240,6 +272,9 @@ impl zed::Extension for AngularToolsExtension {
         if language_server_id.as_ref() == TAILWIND_SERVER_ID {
             return Self::tailwind_command(worktree);
         }
+        if language_server_id.as_ref() == HTML_SERVER_ID {
+            return Self::html_command(worktree);
+        }
         let major = angular_major(worktree);
         self.install_server(language_server_id, major)?;
         Self::install_plugin()?;
@@ -301,6 +336,7 @@ impl zed::Extension for AngularToolsExtension {
     ) -> Result<Option<serde_json::Value>> {
         if language_server_id.as_ref() == EMMET_SERVER_ID
             || language_server_id.as_ref() == TAILWIND_SERVER_ID
+            || language_server_id.as_ref() == HTML_SERVER_ID
             || target_language_server_id.as_ref() != "vtsls"
             || !is_angular_worktree(worktree)
         {

@@ -29,6 +29,9 @@ const TAILWIND_SERVER_ID: &str = "angular-tools-tailwind";
 const TAILWIND_ZED_SERVER: &str = "tailwindcss-language-server";
 // Tailwind does not read the class name in a binding such as `[class.flex]`.
 const TAILWIND_CLASS_BINDING: &str = r"\[class\.([^\]=\s]*)";
+// Nor an unquoted key in `[ngClass]="{flex: a}"`. It reads quoted ones itself.
+const TAILWIND_OBJECT_BINDING: &str = r#"\[(?:ngClass|class)\]="([^"]*)"#;
+const TAILWIND_OBJECT_KEY: &str = r"[{,]\s*([\w-]*)";
 const TAILWIND_PACKAGE: &str = "@tailwindcss/language-server";
 const TAILWIND_VERSION: &str = "0.16.0";
 const TAILWIND_PATH: &str =
@@ -533,7 +536,10 @@ impl zed::Extension for AngularToolsExtension {
         let target = target_language_server_id.as_ref();
         if target == TAILWIND_ZED_SERVER || target == TAILWIND_SERVER_ID {
             return Ok(Some(serde_json::json!({
-                "tailwindCSS": { "experimental": { "classRegex": [TAILWIND_CLASS_BINDING] } },
+                "tailwindCSS": { "experimental": { "classRegex": [
+                    TAILWIND_CLASS_BINDING,
+                    [TAILWIND_OBJECT_BINDING, TAILWIND_OBJECT_KEY],
+                ] } },
             })));
         }
         if target != "vtsls" {

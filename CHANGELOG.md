@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.20.0 - 2026-11-02
 
 - Added restarts of the Angular Language Server after a crash, up to five times, with the open documents.
 - Added text objects for comments, elements and control flow blocks in files of the Angular language.

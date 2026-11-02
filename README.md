@@ -27,7 +27,7 @@ Renaming a tag in files of the **Angular** language also renames its other half,
 
 `editor: rename` on a plain tag renames both of its tags. The server would take the angle brackets as part of the name and then rename nothing, so the proxy answers this too.
 
-Typing `>` after an opening tag adds its closing tag, except for void elements such as `<input>`, as Zed's `use_on_type_format` setting allows. In TypeScript files this stays with vtsls.
+Typing `>` after an opening tag adds its closing tag, except for void elements such as `<input>`, as Zed's `use_on_type_format` setting allows. In TypeScript files this stays with vtsls. Over a WSL or SSH connection Zed leaves this edit out of the undo history, so `ctrl-z` does not remove the closing tag.
 
 Typing `/` at the end of an unfinished opening tag closes it: `<app-card` becomes `<app-card/>`. The caret ends up after `>` in Zed builds that support the `cursor_after_end` bracket option and before it in others.
 

@@ -180,3 +180,35 @@ test('the HTML server completes plain HTML and stays out of Angular syntax and T
   assert.ok(labels(6).includes('class'));
   assert.equal(replies.get(7), null);
 });
+
+test('the Emmet proxy stays out of opening tags and interpolations', async () => {
+  const {frames} = require('../plugin/lsp.js');
+  const proxy = spawn(process.execPath, [
+    path.join(__dirname, '../plugin/emmet-proxy.js'),
+    __dirname,
+    path.join(__dirname, 'fixtures/echo-server.cjs'),
+  ]);
+  const replies = new Map();
+  const done = new Promise(resolve => {
+    frames(proxy.stdout, message => {
+      replies.set(message.id, message.result);
+      if (replies.size === 3) resolve();
+    });
+  });
+  const template = '<p [class.a></p><b>{{ c</b>';
+  const start = '@Component({template: `'.length;
+  const text = `@Component({template: \`${template}\`})\nexport class A {}\n`;
+  const uri = pathToFileURL(path.join(__dirname, 'a.ts')).href;
+  const send = message => proxy.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', ...message})));
+  const completion = (id, inTemplate) =>
+    send({id, method: 'textDocument/completion', params: {textDocument: {uri}, position: {line: 0, character: start + inTemplate}}});
+  send({method: 'textDocument/didOpen', params: {textDocument: {uri, languageId: 'html', version: 1, text}}});
+  completion(1, '<p [class.a'.length);
+  completion(2, '<p [class.a></p><b>{{ c'.length);
+  completion(3, '<p [class.a></p>'.length);
+  await done;
+  proxy.stdin.end();
+  assert.equal(replies.get(1), null);
+  assert.equal(replies.get(2), null);
+  assert.equal(replies.get(3), 'textDocument/completion');
+});

@@ -22,6 +22,13 @@ function resolveTypeScript() {
   }
 }
 
+// Inside an opening tag or an interpolation an abbreviation would turn an
+// attribute or an expression into an element.
+function isAbbreviationPlace(text, offset) {
+  const before = text.slice(0, offset);
+  return before.lastIndexOf('<') <= before.lastIndexOf('>') && before.lastIndexOf('{{') <= before.lastIndexOf('}}');
+}
+
 const ts = fs.existsSync(serverEntry) ? resolveTypeScript() : undefined;
 
 if (!ts) {
@@ -51,8 +58,9 @@ if (!ts) {
       } else if (method === 'textDocument/completion') {
         const {uri} = params.textDocument;
         const text = documents.get(uri) ?? '';
-        const visible = templateOnly(ts, uri, text, toOffset(text, params.position));
-        if (visible === undefined) return reply(id, null);
+        const offset = toOffset(text, params.position);
+        const visible = templateOnly(ts, uri, text, offset);
+        if (visible === undefined || !isAbbreviationPlace(visible, offset)) return reply(id, null);
         const textDocument = {uri, version: ++version};
         server.stdin.write(encode({jsonrpc: '2.0', method: 'textDocument/didChange', params: {textDocument, contentChanges: [{text: visible}]}}));
       }

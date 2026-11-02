@@ -1,6 +1,17 @@
 # Angular Tools
 
-Angular support for [Zed](https://zed.dev), built on the official Angular Language Server.
+Angular support for [Zed](https://zed.dev), built on the official Angular Language Server. It works without settings in Angular projects, including nested ones in a monorepo.
+
+- **Templates:** Angular syntax highlighting, indentation, outline, and `/` to close an unfinished tag.
+- **Language server:** the project's own server or the one for its Angular version, with completion, diagnostics, hover, navigation, rename and inlay hints, in `.html` files and inline `template:` strings.
+- **Selectors:** rename, find references and go to definition across templates and pages such as `index.html`.
+- **Formatting** with Prettier's `angular` parser and the project's configuration.
+- **Completion** of plain HTML tags and attributes, Tailwind classes and, in inline templates, Emmet abbreviations.
+- **Editing** both tags of an element together.
+
+## Installation
+
+The extension is not in the Zed extension registry yet. Clone this repository, and in Zed run `zed: install dev extension` and select its folder. Node.js and the servers come through Zed and npm, so nothing else needs installing.
 
 ## Templates
 
@@ -11,6 +22,8 @@ Files ending in `.component.html` or `.ng.html` open as **Angular** and get Angu
   "file_types": { "Angular": ["**/src/**/*.html"] }
 }
 ```
+
+Renaming a tag in files of the **Angular** language also renames its other half, as Zed's `linked_edits` setting allows. The server does not answer this request, so the proxy does it with the HTML language service. In TypeScript files this stays with vtsls.
 
 Typing `/` at the end of an unfinished opening tag closes it: `<app-card` becomes `<app-card/>`. The caret ends up after `>` in Zed builds that support the `cursor_after_end` bracket option and before it in others.
 

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Fixed text in inline `template:` strings taking the color of a TypeScript string.
+- Fixed a large library hiding a nested Angular project in workspaces of over 50,000 files.
 
 ## 0.21.0 - 2026-11-02
 

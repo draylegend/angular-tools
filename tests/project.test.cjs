@@ -18,6 +18,12 @@ function workspace(files) {
 
 const manifest = dependencies => JSON.stringify({dependencies});
 
+test('a large folder does not hide a project next to it', () => {
+  const files = Object.fromEntries(Array.from({length: 20}, (_, i) => [`libs/big/file${i}.ts`, '']));
+  const root = workspace({...files, 'apps/web/package.json': manifest({'@angular/core': '^21.1.0'})});
+  assert.deepEqual(inspect(root, 10).versions, ['^21.1.0']);
+});
+
 test('finds Angular and Tailwind in nested folders, but not in node_modules', () => {
   const root = workspace({
     'package.json': manifest({}),

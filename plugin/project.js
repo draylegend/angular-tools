@@ -19,12 +19,14 @@ function readJson(file) {
   }
 }
 
-function findManifests(root) {
+// Breadth first, so that in a workspace over the limit only the deepest folders
+// go unread, and a large library cannot hide a project next to it.
+function findManifests(root, maxEntries) {
   const manifests = [];
   const pending = [root];
   let entries = 0;
-  while (pending.length && entries < MAX_ENTRIES) {
-    const dir = pending.pop();
+  for (let next = 0; next < pending.length && entries < maxEntries; next++) {
+    const dir = pending[next];
     let children;
     try {
       children = fs.readdirSync(dir, {withFileTypes: true});
@@ -71,12 +73,12 @@ function compareVersions(a, b) {
  * The Angular folders of a workspace, the versions of Angular in them from the
  * oldest to the newest, and whether any package uses Tailwind.
  */
-function inspect(root) {
+function inspect(root, maxEntries = MAX_ENTRIES) {
   const dirs = new Set();
   const versions = new Set();
   let angular = false;
   let tailwind = false;
-  for (const {dir, name} of findManifests(root)) {
+  for (const {dir, name} of findManifests(root, maxEntries)) {
     if (name === 'angular.json') {
       angular = true;
       dirs.add(dir);

@@ -123,3 +123,20 @@ test('the Emmet proxy answers nothing without a server', async () => {
   proxy.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', method: 'exit'})));
   assert.deepEqual(replies, [{capabilities: {}}, null]);
 });
+
+test('the stand-in server has no capabilities and answers nothing', async () => {
+  const {frames} = require('../plugin/lsp.js');
+  const server = spawn(process.execPath, [path.join(__dirname, '../plugin/no-server.js')]);
+  const replies = [];
+  const done = new Promise(resolve => {
+    frames(server.stdout, message => {
+      replies.push(message.result);
+      if (replies.length === 2) resolve();
+    });
+  });
+  server.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', id: 1, method: 'initialize', params: {}})));
+  server.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', id: 2, method: 'textDocument/completion', params: {}})));
+  await done;
+  server.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', method: 'exit'})));
+  assert.deepEqual(replies, [{capabilities: {}}, null]);
+});

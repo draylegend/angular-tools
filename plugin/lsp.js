@@ -64,4 +64,12 @@ function applyChanges(text, changes) {
   return text;
 }
 
-module.exports = {applyChanges, encode, frames, lineStarts, toOffset, toPosition};
+// Acts as a server without capabilities, for projects a server has no use in.
+function answerNothing() {
+  frames(process.stdin, ({id, method} = {}) => {
+    if (method === 'exit') process.exit(0);
+    if (id !== undefined) process.stdout.write(encode({jsonrpc: '2.0', id, result: method === 'initialize' ? {capabilities: {}} : null}));
+  });
+}
+
+module.exports = {answerNothing, applyChanges, encode, frames, lineStarts, toOffset, toPosition};

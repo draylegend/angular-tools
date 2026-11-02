@@ -16,11 +16,19 @@ const EMMET_SERVER_ID: &str = "angular-tools-emmet";
 const EMMET_PACKAGE: &str = "@olrtg/emmet-language-server";
 const EMMET_VERSION: &str = "2.8.0";
 const EMMET_PATH: &str = "node_modules/@olrtg/emmet-language-server/dist/index.js";
+// Completes Tailwind classes in files of the Angular language, which Zed's own
+// Tailwind server does not cover. Its settings apply here too.
+const TAILWIND_SERVER_ID: &str = "angular-tools-tailwind";
+const TAILWIND_ZED_SERVER: &str = "tailwindcss-language-server";
+const TAILWIND_PACKAGE: &str = "@tailwindcss/language-server";
+const TAILWIND_VERSION: &str = "0.16.0";
+const TAILWIND_PATH: &str =
+    "node_modules/@tailwindcss/language-server/bin/tailwindcss-language-server";
 // The extension's own tsserver plugin and server proxies, written into the
 // work directory.
 const PLUGIN_PACKAGE: &str = "angular-tools";
 const PLUGIN_DIR: &str = "plugin";
-const PLUGIN_FILES: [(&str, &str); 6] = [
+const PLUGIN_FILES: [(&str, &str); 7] = [
     ("package.json", include_str!("../plugin/package.json")),
     ("index.js", include_str!("../plugin/index.js")),
     ("lsp.js", include_str!("../plugin/lsp.js")),
@@ -33,6 +41,7 @@ const PLUGIN_FILES: [(&str, &str); 6] = [
         include_str!("../plugin/ngserver-proxy.js"),
     ),
     ("emmet-proxy.js", include_str!("../plugin/emmet-proxy.js")),
+    ("no-server.js", include_str!("../plugin/no-server.js")),
 ];
 
 struct AngularToolsExtension {
@@ -128,6 +137,35 @@ impl AngularToolsExtension {
         })
     }
 
+    /// The Tailwind server in projects that use Tailwind. Others get a stand-in
+    /// that does nothing, so they install no server.
+    fn tailwind_command(worktree: &zed::Worktree) -> Result<zed::Command> {
+        Self::install_plugin()?;
+        let work_dir = env::current_dir().map_err(|error| error.to_string())?;
+        let uses_tailwind = worktree
+            .read_text_file("package.json")
+            .is_ok_and(|package| package.contains("\"tailwindcss\""));
+        let args = if uses_tailwind {
+            if zed::npm_package_installed_version(TAILWIND_PACKAGE)?.as_deref()
+                != Some(TAILWIND_VERSION)
+            {
+                zed::npm_install_package(TAILWIND_PACKAGE, TAILWIND_VERSION)?;
+            }
+            vec![
+                work_dir.join(TAILWIND_PATH).to_string_lossy().into_owned(),
+                "--stdio".to_string(),
+            ]
+        } else {
+            let stand_in = format!("{PLUGIN_DIR}/node_modules/{PLUGIN_PACKAGE}/no-server.js");
+            vec![work_dir.join(stand_in).to_string_lossy().into_owned()]
+        };
+        Ok(zed::Command {
+            command: zed::node_binary_path()?,
+            args,
+            env: Default::default(),
+        })
+    }
+
     /// Writes the plugin and the proxies into `plugin/node_modules/angular-tools`,
     /// where tsserver resolves the plugin from the `plugin` probe location.
     fn install_plugin() -> Result<()> {
@@ -199,6 +237,9 @@ impl zed::Extension for AngularToolsExtension {
         if language_server_id.as_ref() == EMMET_SERVER_ID {
             return Self::emmet_command(worktree);
         }
+        if language_server_id.as_ref() == TAILWIND_SERVER_ID {
+            return Self::tailwind_command(worktree);
+        }
         let major = angular_major(worktree);
         self.install_server(language_server_id, major)?;
         Self::install_plugin()?;
@@ -230,6 +271,25 @@ impl zed::Extension for AngularToolsExtension {
         })
     }
 
+    /// Zed's settings of its own Tailwind server, with its default for Emmet.
+    fn language_server_workspace_configuration(
+        &mut self,
+        language_server_id: &LanguageServerId,
+        worktree: &zed::Worktree,
+    ) -> Result<Option<serde_json::Value>> {
+        if language_server_id.as_ref() != TAILWIND_SERVER_ID {
+            return Ok(None);
+        }
+        let mut settings = zed::settings::LspSettings::for_worktree(TAILWIND_ZED_SERVER, worktree)
+            .ok()
+            .and_then(|settings| settings.settings)
+            .unwrap_or_else(|| serde_json::json!({}));
+        if settings.get("emmetCompletions").is_none() {
+            settings["emmetCompletions"] = true.into();
+        }
+        Ok(Some(serde_json::json!({ "tailwindCSS": settings })))
+    }
+
     /// Loads the Angular language service and the extension's own plugin into
     /// vtsls as tsserver plugins, so TypeScript features such as rename also
     /// cover templates and selectors.
@@ -240,6 +300,7 @@ impl zed::Extension for AngularToolsExtension {
         worktree: &zed::Worktree,
     ) -> Result<Option<serde_json::Value>> {
         if language_server_id.as_ref() == EMMET_SERVER_ID
+            || language_server_id.as_ref() == TAILWIND_SERVER_ID
             || target_language_server_id.as_ref() != "vtsls"
             || !is_angular_worktree(worktree)
         {

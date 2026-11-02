@@ -8,7 +8,7 @@
 const {spawn} = require('node:child_process');
 const fs = require('node:fs');
 const {fileURLToPath} = require('node:url');
-const {applyChanges, encode, frames, toOffset} = require('./lsp.js');
+const {answerNothing, applyChanges, encode, frames, toOffset} = require('./lsp.js');
 const {declarations} = require('./selector-rename.js');
 
 const [projectRoot, serverEntry, ...serverArgs] = process.argv.slice(2);
@@ -26,10 +26,7 @@ function resolveTypeScript() {
 const ts = fs.existsSync(serverEntry) ? resolveTypeScript() : undefined;
 
 if (!ts) {
-  frames(process.stdin, ({id, method} = {}) => {
-    if (method === 'exit') process.exit(0);
-    if (id !== undefined) reply(id, method === 'initialize' ? {capabilities: {}} : null);
-  });
+  answerNothing();
 } else {
   const server = spawn(process.execPath, [serverEntry, ...serverArgs], {stdio: ['pipe', 'pipe', 'inherit']});
   server.on('exit', code => process.exit(code ?? 0));

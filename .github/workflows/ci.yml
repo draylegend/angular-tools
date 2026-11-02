@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Check out the grammar that extension.toml names
+        run: |
+          repository=$(sed -n 's/^repository = "\(.*tree-sitter.*\)"/\1/p' extension.toml)
+          rev=$(sed -n 's/^rev = "\(.*\)"/\1/p' extension.toml)
+          git clone --quiet "$repository" grammars/angular
+          git -C grammars/angular checkout --quiet "$rev"
+      - run: npm ci
+      - run: npm test
+      - run: rustup target add wasm32-wasip2
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --target wasm32-wasip2 -- --deny warnings
+      - run: cargo build --locked --target wasm32-wasip2

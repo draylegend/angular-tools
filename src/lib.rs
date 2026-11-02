@@ -308,6 +308,32 @@ impl zed::Extension for AngularToolsExtension {
         })
     }
 
+    /// Colors plain HTML tags and attributes like in the template itself. The
+    /// HTML language service marks tags as properties and attributes as values.
+    fn label_for_completion(
+        &self,
+        language_server_id: &LanguageServerId,
+        completion: zed::lsp::Completion,
+    ) -> Option<zed::CodeLabel> {
+        if language_server_id.as_ref() != HTML_SERVER_ID {
+            return None;
+        }
+        let highlight = match completion.kind? {
+            zed::lsp::CompletionKind::Property => "tag",
+            zed::lsp::CompletionKind::Value => "attribute",
+            _ => return None,
+        };
+        let filter_range = (0..completion.label.len()).into();
+        Some(zed::CodeLabel {
+            code: String::new(),
+            spans: vec![zed::CodeLabelSpan::literal(
+                completion.label,
+                Some(highlight.to_string()),
+            )],
+            filter_range,
+        })
+    }
+
     /// Zed's settings of its own Tailwind server, with its default for Emmet.
     fn language_server_workspace_configuration(
         &mut self,

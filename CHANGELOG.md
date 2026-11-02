@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Added support for Angular projects in nested folders of a workspace, such as `apps/web` in a monorepo.
+- Added updates of the installed Angular Language Server within its major version, at most once a day.
 - Fixed the server choice for `catalog:` and `workspace:` versions of `@angular/core`, which now come from the installed package.
 
 ## 0.18.0 - 2026-11-02

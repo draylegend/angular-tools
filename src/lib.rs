@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     env, fs,
+    time::Duration,
 };
 use zed_extension_api::{self as zed, serde_json, LanguageServerId, Result};
 
@@ -9,6 +10,8 @@ const SERVER_PACKAGE: &str = "@angular/language-server";
 // such a version get the latest server known to work.
 const FIRST_SERVER_MAJOR: u32 = 11;
 const DEFAULT_SERVER_MAJOR: u32 = 22;
+// How often an installed server is brought up to date within its major version.
+const SERVER_UPDATE_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 // Installed with the server; the package is also a tsserver plugin.
 const SERVICE_PACKAGE: &str = "@angular/language-service";
 // Formats templates in projects that do not have their own Prettier.
@@ -77,6 +80,10 @@ fn server_alias(major: u32) -> String {
     format!("angular-language-server-{major}")
 }
 
+fn server_range(major: u32) -> String {
+    format!("npm:{SERVER_PACKAGE}@^{major}.0.0")
+}
+
 fn server_dir(major: u32) -> String {
     format!("node_modules/{}", server_alias(major))
 }
@@ -90,7 +97,21 @@ impl AngularToolsExtension {
         fs::metadata(server_path(major)).is_ok_and(|stat| stat.is_file())
     }
 
-    /// Installs the latest server of the given major version once.
+    /// Records an update check and tells whether the last one is old enough for
+    /// another. A failed update waits for the next one too, so that working
+    /// offline does not slow down every start.
+    fn server_update_due(major: u32) -> bool {
+        let stamp = format!("{}.checked", server_alias(major));
+        let due = fs::metadata(&stamp)
+            .and_then(|stat| stat.modified())
+            .ok()
+            .and_then(|modified| modified.elapsed().ok())
+            .is_none_or(|elapsed| elapsed >= SERVER_UPDATE_INTERVAL);
+        due && fs::write(&stamp, "").is_ok()
+    }
+
+    /// Installs the latest server of the given major version, and brings an
+    /// installed one up to date at most once a day, which may fail without harm.
     fn install_server(&mut self, language_server_id: &LanguageServerId, major: u32) -> Result<()> {
         if self.ready_majors.contains(&major) && Self::server_exists(major) {
             return Ok(());
@@ -101,8 +122,8 @@ impl AngularToolsExtension {
                 language_server_id,
                 &zed::LanguageServerInstallationStatus::Downloading,
             );
-            let version = format!("npm:{SERVER_PACKAGE}@^{major}.0.0");
-            if let Err(error) = zed::npm_install_package(&server_alias(major), &version) {
+            if let Err(error) = zed::npm_install_package(&server_alias(major), &server_range(major))
+            {
                 zed::set_language_server_installation_status(
                     language_server_id,
                     &zed::LanguageServerInstallationStatus::Failed(error.clone()),
@@ -115,6 +136,12 @@ impl AngularToolsExtension {
                     server_path(major)
                 ));
             }
+        } else if Self::server_update_due(major) {
+            zed::set_language_server_installation_status(
+                language_server_id,
+                &zed::LanguageServerInstallationStatus::CheckingForUpdate,
+            );
+            zed::npm_install_package(&server_alias(major), &server_range(major)).ok();
         }
 
         zed::set_language_server_installation_status(

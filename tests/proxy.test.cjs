@@ -326,3 +326,44 @@ test('the proxy adds the closing tag after > but not for void elements', async (
     fs.rmSync(dir, {recursive: true, force: true});
   }
 });
+
+test('the proxy renames a plain tag without its angle brackets', async () => {
+  const {frames} = require('../plugin/lsp.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'angular-tools-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'angular.json'), '{}');
+    const proxy = spawn(process.execPath, [
+      path.join(__dirname, '../plugin/ngserver-proxy.js'),
+      dir,
+      path.join(__dirname, 'fixtures/echo-server.cjs'),
+    ]);
+    const replies = new Map();
+    const done = new Promise(resolve => {
+      frames(proxy.stdout, message => {
+        replies.set(message.id, message.result);
+        if (replies.size === 5) resolve();
+      });
+    });
+    const uri = pathToFileURL(path.join(dir, 'a.html')).href;
+    const send = message => proxy.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', ...message})));
+    const at = (line, character) => ({textDocument: {uri}, position: {line, character}});
+    send({id: 1, method: 'initialize', params: {rootUri: pathToFileURL(dir).href}});
+    send({method: 'textDocument/didOpen', params: {textDocument: {uri, languageId: 'html', version: 1, text: '<section>x</section>\n<input class="a">\n'}}});
+    send({id: 2, method: 'textDocument/prepareRename', params: at(0, 13)});
+    send({id: 3, method: 'textDocument/rename', params: {...at(0, 3), newName: 'div'}});
+    send({id: 4, method: 'textDocument/prepareRename', params: at(1, 2)});
+    send({id: 5, method: 'textDocument/prepareRename', params: at(1, 9)});
+    await done;
+    proxy.stdin.end();
+    const range = (line, start, end) => ({start: {line, character: start}, end: {line, character: end}});
+    assert.deepEqual(replies.get(2), {range: range(0, 12, 19), placeholder: 'section'});
+    assert.deepEqual(replies.get(3).changes[uri], [
+      {range: range(0, 1, 8), newText: 'div'},
+      {range: range(0, 12, 19), newText: 'div'},
+    ]);
+    assert.deepEqual(replies.get(4), {range: range(1, 1, 6), placeholder: 'input'});
+    assert.equal(replies.get(5), 'textDocument/prepareRename');
+  } finally {
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
+});

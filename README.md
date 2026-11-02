@@ -25,6 +25,8 @@ Files ending in `.component.html` or `.ng.html` open as **Angular** and get Angu
 
 Renaming a tag in files of the **Angular** language also renames its other half, as Zed's `linked_edits` setting allows. The server does not answer this request, so the proxy does it with the HTML language service. In TypeScript files this stays with vtsls.
 
+`editor: rename` on a plain tag renames both of its tags. The server would take the angle brackets as part of the name and then rename nothing, so the proxy answers this too.
+
 Typing `>` after an opening tag adds its closing tag, except for void elements such as `<input>`, as Zed's `use_on_type_format` setting allows. In TypeScript files this stays with vtsls.
 
 Typing `/` at the end of an unfinished opening tag closes it: `<app-card` becomes `<app-card/>`. The caret ends up after `>` in Zed builds that support the `cursor_after_end` bracket option and before it in others.

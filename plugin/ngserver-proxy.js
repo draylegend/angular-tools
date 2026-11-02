@@ -189,6 +189,24 @@ function linkedEditingRanges(params) {
   return ranges ? {ranges} : null;
 }
 
+// The name of a plain tag at the position, in both of its tags. The server takes
+// the whole `<section>` as the name and then renames nothing.
+function tagNames(params) {
+  const parsed = parsedHtml(params);
+  if (!parsed) return undefined;
+  const {document, htmlDocument} = parsed;
+  const offset = document.offsetAt(params.position);
+  const node = htmlDocument.findNodeAt(offset);
+  if (!node.tag) return undefined;
+  const starts = [node.start + 1];
+  if (node.endTagStart !== undefined) starts.push(node.endTagStart + 2);
+  const names = starts.map(start => ({start, end: start + node.tag.length}));
+  const current = names.find(({start, end}) => start <= offset && offset <= end);
+  if (!current) return undefined;
+  const toRange = ({start, end}) => ({start: document.positionAt(start), end: document.positionAt(end)});
+  return {name: node.tag, current: toRange(current), ranges: names.map(toRange)};
+}
+
 // The closing tag after `>`, which also leaves void elements such as `<input>`
 // and self-closing tags alone.
 function closingTag(params) {
@@ -244,6 +262,8 @@ frames(process.stdin, (message, frame) => {
         const range = {start: toPosition(starts, rename.target.start), end: toPosition(starts, rename.target.end)};
         return reply(id, {range, placeholder: rename.target.name});
       }
+      const tag = angular && tagNames(params);
+      if (tag) return reply(id, {range: tag.current, placeholder: tag.name});
     } else if (method === 'textDocument/rename') {
       const rename = selectorUses(params);
       if (rename) {
@@ -252,6 +272,10 @@ frames(process.stdin, (message, frame) => {
           (changes[uri] ??= []).push({range, newText: params.newName});
         }
         return reply(id, {changes});
+      }
+      const tag = angular && tagNames(params);
+      if (tag) {
+        return reply(id, {changes: {[params.textDocument.uri]: tag.ranges.map(range => ({range, newText: params.newName}))}});
       }
     } else if (method === 'textDocument/references') {
       const uses = selectorUses(params);

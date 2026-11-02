@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Added editing of both tags of an element together in files of the Angular language.
+- Added the closing tag after typing `>` of an opening tag in files of the Angular language.
 
 ## 0.19.0 - 2026-11-02
 

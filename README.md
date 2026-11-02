@@ -7,7 +7,7 @@ Angular support for [Zed](https://zed.dev), built on the official Angular Langua
 - **Selectors:** rename, find references and go to definition across templates and pages such as `index.html`.
 - **Formatting** with Prettier's `angular` parser and the project's configuration.
 - **Completion** of plain HTML tags and attributes, Tailwind classes and, in inline templates, Emmet abbreviations.
-- **Editing** both tags of an element together.
+- **Editing** both tags of an element together, and the closing tag after `>`.
 
 ## Installation
 
@@ -24,6 +24,8 @@ Files ending in `.component.html` or `.ng.html` open as **Angular** and get Angu
 ```
 
 Renaming a tag in files of the **Angular** language also renames its other half, as Zed's `linked_edits` setting allows. The server does not answer this request, so the proxy does it with the HTML language service. In TypeScript files this stays with vtsls.
+
+Typing `>` after an opening tag adds its closing tag, except for void elements such as `<input>`, as Zed's `use_on_type_format` setting allows. In TypeScript files this stays with vtsls.
 
 Typing `/` at the end of an unfinished opening tag closes it: `<app-card` becomes `<app-card/>`. The caret ends up after `>` in Zed builds that support the `cursor_after_end` bracket option and before it in others.
 

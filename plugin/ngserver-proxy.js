@@ -183,7 +183,26 @@ async function format(params) {
 // Both tags of an element for editing them together, which the server does not
 // answer. The HTML language service comes with the extension's HTML server.
 function linkedEditingRanges(params) {
-  const text = documents.get(fileURLToPath(params.textDocument.uri));
+  const parsed = parsedHtml(params);
+  if (!parsed) return undefined;
+  const ranges = parsed.service.findLinkedEditingRanges(parsed.document, params.position, parsed.htmlDocument);
+  return ranges ? {ranges} : null;
+}
+
+// The closing tag after `>`, which also leaves void elements such as `<input>`
+// and self-closing tags alone.
+function closingTag(params) {
+  const parsed = parsedHtml(params);
+  if (!parsed) return undefined;
+  const offset = parsed.document.offsetAt(params.position);
+  if (parsed.htmlDocument.findNodeBefore(offset).endTagStart !== undefined) return null;
+  const tag = parsed.service.doTagComplete(parsed.document, params.position, parsed.htmlDocument);
+  if (!tag) return null;
+  return [{range: {start: params.position, end: params.position}, newText: tag.replace('$0', '')}];
+}
+
+function parsedHtml({textDocument: {uri}}) {
+  const text = documents.get(fileURLToPath(uri));
   if (text === undefined) return undefined;
   let html;
   try {
@@ -192,9 +211,8 @@ function linkedEditingRanges(params) {
     return undefined;
   }
   const service = html.getLanguageService();
-  const document = html.TextDocument.create(params.textDocument.uri, 'html', 0, text);
-  const ranges = service.findLinkedEditingRanges(document, params.position, service.parseHTMLDocument(document));
-  return ranges ? {ranges} : null;
+  const document = html.TextDocument.create(uri, 'html', 0, text);
+  return {service, document, htmlDocument: service.parseHTMLDocument(document)};
 }
 
 function toLocation(location) {
@@ -244,6 +262,9 @@ frames(process.stdin, (message, frame) => {
     } else if (method === 'textDocument/linkedEditingRange' && angular) {
       const ranges = linkedEditingRanges(params);
       if (ranges !== undefined) return reply(id, ranges);
+    } else if (method === 'textDocument/onTypeFormatting' && angular) {
+      const edits = closingTag(params);
+      if (edits !== undefined) return reply(id, edits);
     } else if (method === 'textDocument/formatting' && angular) {
       format(params).then(
         edits => reply(id, edits),
@@ -263,6 +284,7 @@ frames(process.stdin, (message, frame) => {
 frames(server.stdout, (message, frame) => {
   if (angular && initializeId !== undefined && message?.id === initializeId && message.result?.capabilities) {
     message.result.capabilities.documentFormattingProvider = true;
+    message.result.capabilities.documentOnTypeFormattingProvider = {firstTriggerCharacter: '>'};
     frame = encode(message);
   }
   process.stdout.write(frame);

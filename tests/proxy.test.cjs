@@ -285,3 +285,44 @@ test('the proxy links the opening and closing tag of an element', async () => {
     fs.rmSync(dir, {recursive: true, force: true});
   }
 });
+
+test('the proxy adds the closing tag after > but not for void elements', async () => {
+  const {frames} = require('../plugin/lsp.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'angular-tools-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'angular.json'), '{}');
+    const proxy = spawn(process.execPath, [
+      path.join(__dirname, '../plugin/ngserver-proxy.js'),
+      dir,
+      path.join(__dirname, 'fixtures/echo-server.cjs'),
+    ]);
+    const replies = new Map();
+    const done = new Promise(resolve => {
+      frames(proxy.stdout, message => {
+        replies.set(message.id, message.result);
+        if (replies.size === 6) resolve();
+      });
+    });
+    const uri = pathToFileURL(path.join(dir, 'a.html')).href;
+    const send = message => proxy.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', ...message})));
+    const typed = (id, line, character) =>
+      send({id, method: 'textDocument/onTypeFormatting', params: {textDocument: {uri}, position: {line, character}, ch: '>', options: {tabSize: 2, insertSpaces: true}}});
+    const text = '<app-card>\n<input>\n<a-b/>\n{{ a > b }}\n<p>x</p>\n';
+    send({id: 1, method: 'initialize', params: {rootUri: pathToFileURL(dir).href}});
+    send({method: 'textDocument/didOpen', params: {textDocument: {uri, languageId: 'html', version: 1, text}}});
+    typed(2, 0, 10);
+    typed(3, 1, 7);
+    typed(4, 2, 6);
+    typed(5, 3, 6);
+    typed(6, 4, 3);
+    await done;
+    proxy.stdin.end();
+    assert.deepEqual(replies.get(2).map(edit => edit.newText), ['</app-card>']);
+    assert.equal(replies.get(3), null);
+    assert.equal(replies.get(4), null);
+    assert.equal(replies.get(5), null);
+    assert.equal(replies.get(6), null);
+  } finally {
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
+});

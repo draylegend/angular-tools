@@ -42,20 +42,57 @@ function versionArguments() {
   return args;
 }
 
-const server = spawn(
-  process.execPath,
-  [
-    serverEntry,
-    '--tsProbeLocations',
-    tsProbeLocations.join(','),
-    '--ngProbeLocations',
-    ngProbeLocations.join(','),
-    ...versionArguments(),
-    ...serverArgs,
-  ],
-  {stdio: ['pipe', 'pipe', 'inherit']},
-);
-server.on('exit', code => process.exit(code ?? 0));
+// A crashed server, for example out of memory, starts again with the open
+// documents, a limited number of times. Requests it left unanswered fail.
+const MAX_RESTARTS = 5;
+const RESTART_INITIALIZE_ID = 'angular-tools-restart';
+const pendingRequests = new Set();
+let restarts = 0;
+let stopping = false;
+let initializeParams;
+let server;
+
+function startServer() {
+  const started = spawn(
+    process.execPath,
+    [
+      serverEntry,
+      '--tsProbeLocations',
+      tsProbeLocations.join(','),
+      '--ngProbeLocations',
+      ngProbeLocations.join(','),
+      ...versionArguments(),
+      ...serverArgs,
+    ],
+    {stdio: ['pipe', 'pipe', 'inherit']},
+  );
+  started.stdin.on('error', () => {});
+  started.on('exit', (code, signal) => {
+    if (stopping || (code === 0 && !signal) || restarts >= MAX_RESTARTS || !initializeParams) {
+      process.exit(code ?? 1);
+    }
+    restarts++;
+    process.stderr.write(`angular-tools: the server exited with ${signal ?? code}; restart ${restarts} of ${MAX_RESTARTS}\n`);
+    restartServer();
+  });
+  frames(started.stdout, onServerMessage);
+  return started;
+}
+
+function restartServer() {
+  for (const id of pendingRequests) {
+    process.stdout.write(encode({jsonrpc: '2.0', id, error: {code: -32603, message: 'The Angular Language Server restarted'}}));
+  }
+  pendingRequests.clear();
+  server = startServer();
+  const send = message => server.stdin.write(encode({jsonrpc: '2.0', ...message}));
+  send({id: RESTART_INITIALIZE_ID, method: 'initialize', params: initializeParams});
+  send({method: 'initialized', params: {}});
+  for (const [fileName, text] of documents) {
+    const textDocument = {uri: pathToFileURL(fileName).href, languageId: 'html', version: 1, text};
+    send({method: 'textDocument/didOpen', params: {textDocument}});
+  }
+}
 
 const documents = new Map();
 let roots = [];
@@ -248,6 +285,7 @@ frames(process.stdin, (message, frame) => {
       angular = projectInfo.angular;
       project.contains = containedIn(roots);
       initializeId = id;
+      initializeParams = params;
     } else if (method === 'textDocument/didOpen') {
       documents.set(fileURLToPath(params.textDocument.uri), params.textDocument.text);
     } else if (method === 'textDocument/didChange') {
@@ -302,15 +340,24 @@ frames(process.stdin, (message, frame) => {
   } catch (error) {
     process.stderr.write(`angular-tools: ${error.stack ?? error}\n`);
   }
+  if (method === 'shutdown' || method === 'exit') stopping = true;
+  if (method && id !== undefined) pendingRequests.add(id);
   server.stdin.write(frame);
 });
 
-frames(server.stdout, (message, frame) => {
+function onServerMessage(message, frame) {
+  if (message?.id === RESTART_INITIALIZE_ID) return;
+  if (message && !message.method) pendingRequests.delete(message.id);
   if (angular && initializeId !== undefined && message?.id === initializeId && message.result?.capabilities) {
     message.result.capabilities.documentFormattingProvider = true;
     message.result.capabilities.documentOnTypeFormattingProvider = {firstTriggerCharacter: '>'};
     frame = encode(message);
   }
   process.stdout.write(frame);
+}
+
+server = startServer();
+process.stdin.on('end', () => {
+  stopping = true;
+  server.stdin.end();
 });
-process.stdin.on('end', () => server.stdin.end());

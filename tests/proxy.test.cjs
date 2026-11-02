@@ -410,3 +410,32 @@ test('the HTML server answers CSS in styles and hovers on plain HTML', async () 
   assert.ok(labels(7).includes('color'));
   assert.equal(replies.get(8), null);
 });
+
+test('the proxy restarts a crashed server with the open documents, up to a limit', async () => {
+  const {frames} = require('../plugin/lsp.js');
+  const proxy = spawn(process.execPath, [
+    path.join(__dirname, '../plugin/ngserver-proxy.js'),
+    __dirname,
+    path.join(__dirname, 'fixtures/crash-server.cjs'),
+  ]);
+  const waiting = new Map();
+  frames(proxy.stdout, message => waiting.get(message.id)?.(message));
+  const send = message => proxy.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', ...message})));
+  let nextId = 1;
+  const request = (method, params = {}) =>
+    new Promise(resolve => {
+      const id = nextId++;
+      waiting.set(id, resolve);
+      send({id, method, params});
+    });
+  const uri = pathToFileURL(path.join(__dirname, 'a.html')).href;
+  await request('initialize', {rootUri: pathToFileURL(__dirname).href});
+  send({method: 'textDocument/didOpen', params: {textDocument: {uri, languageId: 'html', version: 1, text: '<a></a>'}}});
+  const crashed = await request('boom');
+  assert.equal(crashed.error.code, -32603);
+  assert.deepEqual((await request('opened')).result, ['<a></a>']);
+  const exited = new Promise(resolve => proxy.on('exit', resolve));
+  for (let i = 0; i < 4; i++) await request('boom');
+  send({id: 99, method: 'boom'});
+  assert.equal(await exited, 1);
+});

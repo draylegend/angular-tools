@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added restarts of the Angular Language Server after a crash, up to five times, with the open documents.
 - Added text objects for comments, elements and control flow blocks in files of the Angular language.
 - Added `editor: wrap selections in tag` in files of the Angular language.
 - Added hover for plain HTML tags and attributes, and completion and hover for CSS in `<style>` and `style=""`, in files of the Angular language and in inline `template:` strings.

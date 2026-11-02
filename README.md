@@ -75,6 +75,8 @@ The official language service does not rename selectors, so the extension adds i
 
 Ctrl-click on a component tag or a directive attribute opens the selector that declares it, such as `selector: 'app-card'`, in templates and in HTML pages that host a component, such as `index.html`. The server would open the class and does not know such pages, so the proxy and the plugin answer these requests.
 
+The code action **Go to component** in an external template opens the component that uses it, the first one if there are several.
+
 Find references on a selector name lists the selector string and every tag or attribute that uses it, again including pages such as `index.html`. A selector string is its own definition, like any declaration: Ctrl-hover underlines it and Ctrl-click shows these references.
 
 ## Compatibility

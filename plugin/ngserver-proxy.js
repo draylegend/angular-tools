@@ -270,6 +270,35 @@ function parsedHtml({textDocument: {uri}}) {
   return {service, document, htmlDocument: service.parseHTMLDocument(document)};
 }
 
+// A code action in a template that opens its component, like the official
+// client's command: the proxy asks the server for the component and tells the
+// editor to show it.
+const GO_TO_COMPONENT = 'angular-tools.goToComponent';
+const INTERNAL_ID = 'angular-tools-internal-';
+const codeActionRequests = new Map();
+const componentRequests = new Map();
+let internalRequests = 0;
+
+function goToComponentAction(uri) {
+  const title = 'Go to component';
+  return {title, kind: 'quickfix', command: {title, command: GO_TO_COMPONENT, arguments: [uri]}};
+}
+
+function goToComponent(id, uri) {
+  const internalId = INTERNAL_ID + ++internalRequests;
+  componentRequests.set(internalId, id);
+  server.stdin.write(encode({jsonrpc: '2.0', id: internalId, method: 'angular/getComponentsWithTemplateFile', params: {textDocument: {uri}}}));
+}
+
+function showComponent(id, components) {
+  const component = components?.[0];
+  if (component) {
+    const params = {uri: component.uri, takeFocus: true, selection: component.range};
+    process.stdout.write(encode({jsonrpc: '2.0', id: INTERNAL_ID + ++internalRequests, method: 'window/showDocument', params}));
+  }
+  reply(id, null);
+}
+
 function toLocation(location) {
   const starts = lineStarts(readFile(location.fileName) ?? '');
   const range = {start: toPosition(starts, location.start), end: toPosition(starts, location.end)};
@@ -278,6 +307,7 @@ function toLocation(location) {
 
 frames(process.stdin, (message, frame) => {
   const {method, params, id} = message ?? {};
+  if (!method && String(id).startsWith(INTERNAL_ID)) return;
   try {
     if (method === 'initialize') {
       const folders = params.workspaceFolders?.map(folder => folder.uri) ?? (params.rootUri ? [params.rootUri] : []);
@@ -327,6 +357,13 @@ frames(process.stdin, (message, frame) => {
     } else if (method === 'textDocument/onTypeFormatting' && angular) {
       const edits = closingTag(params);
       if (edits !== undefined) return reply(id, edits);
+    } else if (method === 'textDocument/codeAction' && angular && params.textDocument.uri.endsWith('.html')) {
+      const {only} = params.context ?? {};
+      if (!only || only.includes('quickfix')) codeActionRequests.set(id, params.textDocument.uri);
+    } else if (method === 'codeAction/resolve' && params.command?.command === GO_TO_COMPONENT) {
+      return reply(id, params);
+    } else if (method === 'workspace/executeCommand' && params.command === GO_TO_COMPONENT) {
+      return goToComponent(id, params.arguments[0]);
     } else if (method === 'textDocument/formatting' && angular) {
       format(params).then(
         edits => reply(id, edits),
@@ -347,10 +384,24 @@ frames(process.stdin, (message, frame) => {
 
 function onServerMessage(message, frame) {
   if (message?.id === RESTART_INITIALIZE_ID) return;
+  if (componentRequests.has(message?.id)) {
+    const id = componentRequests.get(message.id);
+    componentRequests.delete(message.id);
+    return showComponent(id, message.result);
+  }
+  if (codeActionRequests.has(message?.id)) {
+    const uri = codeActionRequests.get(message.id);
+    codeActionRequests.delete(message.id);
+    if (!message.error) {
+      message.result = [...(message.result ?? []), goToComponentAction(uri)];
+      frame = encode(message);
+    }
+  }
   if (message && !message.method) pendingRequests.delete(message.id);
   if (angular && initializeId !== undefined && message?.id === initializeId && message.result?.capabilities) {
     message.result.capabilities.documentFormattingProvider = true;
     message.result.capabilities.documentOnTypeFormattingProvider = {firstTriggerCharacter: '>'};
+    message.result.capabilities.executeCommandProvider = {commands: [GO_TO_COMPONENT]};
     frame = encode(message);
   }
   process.stdout.write(frame);

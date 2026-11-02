@@ -439,3 +439,53 @@ test('the proxy restarts a crashed server with the open documents, up to a limit
   send({id: 99, method: 'boom'});
   assert.equal(await exited, 1);
 });
+
+test('the proxy offers and runs Go to component in templates', async () => {
+  const {frames} = require('../plugin/lsp.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'angular-tools-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'angular.json'), '{}');
+    const proxy = spawn(process.execPath, [
+      path.join(__dirname, '../plugin/ngserver-proxy.js'),
+      dir,
+      path.join(__dirname, 'fixtures/crash-server.cjs'),
+    ]);
+    const messages = [];
+    const waiting = [];
+    frames(proxy.stdout, message => {
+      messages.push(message);
+      waiting.splice(0).forEach(check => check());
+    });
+    const received = test =>
+      new Promise(resolve => {
+        const check = () => {
+          const found = messages.find(test);
+          if (found) resolve(found);
+          else waiting.push(check);
+        };
+        check();
+      });
+    const send = message => proxy.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', ...message})));
+    const uri = pathToFileURL(path.join(dir, 'a.html')).href;
+    send({id: 1, method: 'initialize', params: {rootUri: pathToFileURL(dir).href}});
+    const initialized = await received(message => message.id === 1);
+    assert.deepEqual(initialized.result.capabilities.executeCommandProvider.commands, ['angular-tools.goToComponent']);
+    const range = {start: {line: 0, character: 0}, end: {line: 0, character: 0}};
+    send({id: 2, method: 'textDocument/codeAction', params: {textDocument: {uri}, range, context: {diagnostics: [], only: ['quickfix']}}});
+    const [action] = (await received(message => message.id === 2)).result;
+    assert.equal(action.title, 'Go to component');
+    send({id: 3, method: 'textDocument/codeAction', params: {textDocument: {uri}, range, context: {diagnostics: [], only: ['source.fixAll']}}});
+    assert.equal((await received(message => message.id === 3)).result, null);
+    send({id: 4, method: 'codeAction/resolve', params: action});
+    assert.deepEqual((await received(message => message.id === 4)).result, action);
+    send({id: 5, method: 'workspace/executeCommand', params: action.command});
+    const show = await received(message => message.method === 'window/showDocument');
+    assert.equal(show.params.uri, 'file:///a.ts');
+    assert.equal(show.params.takeFocus, true);
+    assert.equal((await received(message => message.id === 5)).result, null);
+    send({id: show.id, result: {success: true}});
+    proxy.stdin.end();
+  } finally {
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
+});

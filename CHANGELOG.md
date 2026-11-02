@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added the code action "Go to component" in templates of the Angular language.
+
 ## 0.20.0 - 2026-11-02
 
 - Added restarts of the Angular Language Server after a crash, up to five times, with the open documents.

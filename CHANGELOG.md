@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed text in inline `template:` strings taking the color of a TypeScript string.
+
 ## 0.21.0 - 2026-11-02
 
 - Added the code action "Go to component" in templates of the Angular language.

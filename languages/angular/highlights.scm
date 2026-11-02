@@ -1,5 +1,9 @@
 ; HTML structure and literal values.
 (comment) @comment
+; Without a color of its own, text in an inline template takes the color of the
+; TypeScript string around it. Themes give @variable the plain text color, while
+; some give @embedded the color of strings.
+(text) @variable
 (doctype) @tag.doctype
 (tag_name) @tag
 (attribute_name) @attribute

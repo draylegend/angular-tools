@@ -12,7 +12,7 @@ frames(process.stdin, ({id, method, params} = {}) => {
   if (id === undefined) return;
   const component = {uri: 'file:///a.ts', range: {start: {line: 1, character: 2}, end: {line: 1, character: 3}}};
   const results = {
-    initialize: {capabilities: {}},
+    initialize: {capabilities: {completionProvider: {triggerCharacters: ['<']}}},
     opened,
     'textDocument/codeAction': null,
     'angular/getComponentsWithTemplateFile': [component],

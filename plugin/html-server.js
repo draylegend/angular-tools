@@ -8,6 +8,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const {fileURLToPath} = require('node:url');
 const path = require('node:path');
 const {answerNothing, applyChanges, encode, frames, toOffset} = require('./lsp.js');
 const {inspect, resolvePackage} = require('./project.js');
@@ -88,7 +89,42 @@ if (!fs.existsSync(serviceEntry)) {
     return {document, parsed: service.parseHTMLDocument(document)};
   };
 
+  // Members of the component whose template holds the offset, for the start
+  // of an interpolation, where vtsls drops the request: `{` is not among its
+  // trigger characters. The list is incomplete, so the next character asks
+  // again, and vtsls answers with the Angular service from then on.
+  const interpolationStart = ({textDocument: {uri}, position, context}) => {
+    if (!ts || !uri.endsWith('.ts') || context?.triggerCharacter !== '{') return undefined;
+    const text = documents.get(uri) ?? '';
+    const offset = toOffset(text, position);
+    if (!text.slice(0, offset).endsWith('{{') || templateOnly(ts, uri, text, offset) === undefined) return undefined;
+    const sourceFile = ts.createSourceFile(fileURLToPath(uri), text, ts.ScriptTarget.Latest, true);
+    let component;
+    const visit = node => {
+      if (component || node.pos > offset || node.end < offset) return;
+      const decorators = ts.canHaveDecorators?.(node) ? ts.getDecorators(node) ?? [] : node.decorators ?? [];
+      if (ts.isClassDeclaration(node) && decorators.some(decorator => decorator.pos <= offset && offset <= decorator.end)) {
+        component = node;
+      } else {
+        ts.forEachChild(node, visit);
+      }
+    };
+    ts.forEachChild(sourceFile, visit);
+    const hidden = ts.ModifierFlags.Private | ts.ModifierFlags.Static;
+    const members = (component?.members ?? []).flatMap(member => {
+      if (!member.name || !ts.isIdentifier(member.name) || ts.getCombinedModifierFlags(member) & hidden) return [];
+      if (ts.isMethodDeclaration(member)) return [{label: member.name.text, kind: 2}];
+      if (ts.isPropertyDeclaration(member) || ts.isGetAccessorDeclaration(member)) return [{label: member.name.text, kind: 5}];
+      return [];
+    });
+    const keywords = ['true', 'false', 'null', 'undefined'].map(label => ({label, kind: 14, sortText: `~${label}`}));
+    return {isIncomplete: true, items: [...members, ...keywords]};
+  };
+
   const complete = params => {
+    const members = interpolationStart(params);
+    if (members) return members;
+    if (params.context?.triggerCharacter === '{') return null;
     const content = contentAt(params);
     if (!content) return null;
     if (!content.styleSheet) {
@@ -124,7 +160,7 @@ if (!fs.existsSync(serviceEntry)) {
   frames(process.stdin, ({method, params, id} = {}) => {
     if (method === 'exit') process.exit(0);
     if (method === 'initialize') {
-      const completionProvider = {triggerCharacters: ['<', ' ', ':']};
+      const completionProvider = {triggerCharacters: ['<', ' ', ':', '{']};
       const documentOnTypeFormattingProvider = {firstTriggerCharacter: '>'};
       const capabilities = {textDocumentSync: 2, completionProvider, hoverProvider: true, documentOnTypeFormattingProvider};
       return reply(id, {capabilities});

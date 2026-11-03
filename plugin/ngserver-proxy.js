@@ -366,6 +366,11 @@ frames(process.stdin, (message, frame) => {
     } else if (method === 'textDocument/definition') {
       const links = selectorDefinition(params);
       if (links) return reply(id, links);
+    } else if (method === 'textDocument/completion' && angular && params.context?.triggerCharacter === '{') {
+      // `{` asks only for interpolations: the server offers their members
+      // right after `{{`, where its own trigger characters do not reach.
+      const text = documents.get(fileURLToPath(params.textDocument.uri)) ?? '';
+      if (!text.slice(0, toOffset(text, params.position)).endsWith('{{')) return reply(id, null);
     } else if (method === 'textDocument/linkedEditingRange' && angular) {
       const ranges = linkedEditingRanges(params);
       if (ranges !== undefined) return reply(id, ranges);
@@ -431,6 +436,8 @@ function onServerMessage(message, frame) {
   if (angular && initializeId !== undefined && message?.id === initializeId && message.result?.capabilities) {
     message.result.capabilities.documentFormattingProvider = true;
     message.result.capabilities.documentOnTypeFormattingProvider = {firstTriggerCharacter: '>'};
+    const completion = message.result.capabilities.completionProvider;
+    if (completion) completion.triggerCharacters = [...(completion.triggerCharacters ?? []), '{'];
     message.result.capabilities.executeCommandProvider = {commands: [GO_TO_COMPONENT, APPLY_COMPLETION_ACTION]};
     frame = encode(message);
   }

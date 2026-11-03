@@ -528,8 +528,64 @@ test('the proxy offers and runs Go to component in templates', async () => {
     send({id: 6, method: 'workspace/executeCommand', params: {command: 'angular.applyCompletionCodeAction', arguments: [[edit]]}});
     assert.deepEqual((await received(message => message.method === 'workspace/applyEdit')).params, {edit});
     assert.equal((await received(message => message.id === 6)).result, null);
+    assert.deepEqual(initialized.result.capabilities.completionProvider.triggerCharacters, ['<', '{']);
+    send({method: 'textDocument/didOpen', params: {textDocument: {uri, languageId: 'html', version: 1, text: '<p>{{}}</p><b>{}</b>'}}});
+    const brace = (id, character) =>
+      send({id, method: 'textDocument/completion', params: {textDocument: {uri}, position: {line: 0, character}, context: {triggerKind: 2, triggerCharacter: '{'}}});
+    brace(7, 5);
+    brace(8, 15);
+    assert.equal((await received(message => message.id === 7)).result, 'textDocument/completion');
+    assert.equal((await received(message => message.id === 8)).result, null);
     proxy.stdin.end();
   } finally {
     fs.rmSync(dir, {recursive: true, force: true});
   }
+});
+
+test('the HTML server offers the members of a component at the start of an interpolation', async () => {
+  const {frames} = require('../plugin/lsp.js');
+  const server = spawn(process.execPath, [
+    path.join(__dirname, '../plugin/html-server.js'),
+    path.join(__dirname, '..'),
+    require.resolve('vscode-html-languageservice'),
+  ]);
+  const replies = new Map();
+  const done = new Promise(resolve => {
+    frames(server.stdout, message => {
+      replies.set(message.id, message.result);
+      if (replies.size === 4) resolve();
+    });
+  });
+  const send = message => server.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', ...message})));
+  const ts = pathToFileURL(path.join(__dirname, 'a.ts')).href;
+  const lines = [
+    '@Component({template: `<p>{{}}</p><b>{}</b>`})',
+    'export class A {',
+    "  label = 'Save';",
+    '  private secret = 1;',
+    '  static shared = 2;',
+    '  protected get size() { return 1; }',
+    '  save() {}',
+    '  constructor() {}',
+    '}',
+    'const b = {};',
+  ];
+  const ask = (id, line, after) =>
+    send({id, method: 'textDocument/completion', params: {
+      textDocument: {uri: ts},
+      position: {line, character: lines[line].indexOf(after) + after.length},
+      context: {triggerKind: 2, triggerCharacter: '{'},
+    }});
+  send({id: 1, method: 'initialize', params: {}});
+  send({method: 'textDocument/didOpen', params: {textDocument: {uri: ts, languageId: 'html', version: 1, text: lines.join('\n')}}});
+  ask(2, 0, '<p>{{');
+  ask(3, 0, '<b>{');
+  ask(4, 9, 'b = {');
+  await done;
+  send({method: 'exit'});
+  assert.ok(replies.get(1).capabilities.completionProvider.triggerCharacters.includes('{'));
+  assert.equal(replies.get(2).isIncomplete, true);
+  assert.deepEqual(replies.get(2).items.map(item => item.label), ['label', 'size', 'save', 'true', 'false', 'null', 'undefined']);
+  assert.equal(replies.get(3), null);
+  assert.equal(replies.get(4), null);
 });

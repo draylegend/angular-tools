@@ -411,6 +411,46 @@ test('the HTML server answers CSS in styles and hovers on plain HTML', async () 
   assert.equal(replies.get(8), null);
 });
 
+test('the HTML server closes tags after `>` in inline templates', async () => {
+  const {frames} = require('../plugin/lsp.js');
+  const server = spawn(process.execPath, [
+    path.join(__dirname, '../plugin/html-server.js'),
+    path.join(__dirname, '..'),
+    require.resolve('vscode-html-languageservice'),
+  ]);
+  const replies = new Map();
+  const done = new Promise(resolve => {
+    frames(server.stdout, message => {
+      replies.set(message.id, message.result);
+      if (replies.size === 5) resolve();
+    });
+  });
+  const send = message => server.stdin.write(frame(JSON.stringify({jsonrpc: '2.0', ...message})));
+  const ts = pathToFileURL(path.join(__dirname, 'a.ts')).href;
+  const lines = [
+    "const other = '<b>';",
+    `@Component({template: \`<p [ngClass]="{'a':true}">\`})`,
+    '@Component({template: \`<input>\`})',
+    '@Component({template: \`{{ a >\`})',
+  ];
+  const at = (line, after) => ({line, character: lines[line].indexOf(after) + after.length});
+  const type = (id, position) =>
+    send({id, method: 'textDocument/onTypeFormatting', params: {textDocument: {uri: ts}, position, ch: '>', options: {}}});
+  send({id: 1, method: 'initialize', params: {}});
+  send({method: 'textDocument/didOpen', params: {textDocument: {uri: ts, languageId: 'html', version: 1, text: lines.join('\n')}}});
+  type(2, at(1, 'true}">'));
+  type(3, at(0, '<b>'));
+  type(4, at(2, '<input>'));
+  type(5, at(3, 'a >'));
+  await done;
+  send({method: 'exit'});
+  assert.deepEqual(replies.get(1).capabilities.documentOnTypeFormattingProvider, {firstTriggerCharacter: '>'});
+  assert.deepEqual(replies.get(2), [{range: {start: at(1, 'true}">'), end: at(1, 'true}">')}, newText: '</p>'}]);
+  assert.equal(replies.get(3), null);
+  assert.equal(replies.get(4), null);
+  assert.equal(replies.get(5), null);
+});
+
 test('the proxy restarts a crashed server with the open documents, up to a limit', async () => {
   const {frames} = require('../plugin/lsp.js');
   const proxy = spawn(process.execPath, [

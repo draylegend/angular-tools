@@ -27,7 +27,7 @@ Renaming a tag in files of the **Angular** language also renames its other half,
 
 `editor: rename` on a plain tag renames both of its tags. The server would take the angle brackets as part of the name and then rename nothing, so the proxy answers this too.
 
-Typing `>` after an opening tag adds its closing tag, except for void elements such as `<input>`, as Zed's `use_on_type_format` setting allows. In TypeScript files this stays with vtsls. Over a WSL or SSH connection Zed leaves this edit out of the undo history, so `ctrl-z` does not remove the closing tag.
+Typing `>` after an opening tag adds its closing tag, except for void elements such as `<input>`, as Zed's `use_on_type_format` setting allows. In inline `template:` strings of Angular projects the HTML server described below does this, since vtsls does not. Over a WSL or SSH connection Zed leaves this edit out of the undo history, so `ctrl-z` does not remove the closing tag.
 
 `editor: wrap selections in tag` works, and elements and control flow blocks count as text objects for Vim mode.
 

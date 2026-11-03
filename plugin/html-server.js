@@ -1,7 +1,8 @@
 // Completes plain HTML tags and attributes, which the Angular Language Server
 // leaves out, and CSS in `<style>` and `style=""`, and describes them on hover,
 // in files of the Angular language and in inline `template:` strings of
-// components. Angular syntax stays with that server. Without the HTML language
+// components. Angular syntax stays with that server. Typing `>` after an
+// opening tag adds its closing tag, which vtsls does not do in templates. Without the HTML language
 // service, in projects without Angular, it answers nothing.
 // Usage: node html-server.js <project root> <HTML language service entry>
 'use strict';
@@ -106,11 +107,27 @@ if (!fs.existsSync(serviceEntry)) {
       : service.doHover(content.document, params.position, content.parsed);
   };
 
+  // The closing tag after `>`, which also leaves void elements such as
+  // `<input>` and self-closing tags alone.
+  const closingTag = ({textDocument: {uri}, position}) => {
+    const stored = documents.get(uri) ?? '';
+    const offset = toOffset(stored, position);
+    const text = uri.endsWith('.ts') ? ts && templateOnly(ts, uri, stored, offset) : stored;
+    if (text === undefined || isAngularSyntax(text, offset)) return null;
+    const document = html.TextDocument.create(uri, 'html', 0, text);
+    const parsed = service.parseHTMLDocument(document);
+    if (parsed.findNodeBefore(offset).endTagStart !== undefined) return null;
+    const tag = service.doTagComplete(document, position, parsed);
+    return tag ? [{range: {start: position, end: position}, newText: tag.replace('$0', '')}] : null;
+  };
+
   frames(process.stdin, ({method, params, id} = {}) => {
     if (method === 'exit') process.exit(0);
     if (method === 'initialize') {
       const completionProvider = {triggerCharacters: ['<', ' ', ':']};
-      return reply(id, {capabilities: {textDocumentSync: 2, completionProvider, hoverProvider: true}});
+      const documentOnTypeFormattingProvider = {firstTriggerCharacter: '>'};
+      const capabilities = {textDocumentSync: 2, completionProvider, hoverProvider: true, documentOnTypeFormattingProvider};
+      return reply(id, {capabilities});
     }
     if (method === 'textDocument/didOpen') documents.set(params.textDocument.uri, params.textDocument.text);
     else if (method === 'textDocument/didClose') documents.delete(params.textDocument.uri);
@@ -121,6 +138,7 @@ if (!fs.existsSync(serviceEntry)) {
       try {
         if (method === 'textDocument/completion') reply(id, complete(params));
         else if (method === 'textDocument/hover') reply(id, hover(params));
+        else if (method === 'textDocument/onTypeFormatting') reply(id, closingTag(params));
         else reply(id, null);
       } catch (error) {
         process.stderr.write(`angular-tools: ${error.stack ?? error}\n`);

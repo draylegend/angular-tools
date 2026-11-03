@@ -8,7 +8,9 @@ completion_query_characters = ["-"]
 # `app-card` stays one name while both of its tags are edited together.
 linked_edit_characters = ["-"]
 wrap_characters = { start_prefix = "<", start_suffix = ">", end_prefix = "</", end_suffix = ">" }
-autoclose_before = ">})]\"'"
+# Brackets and quotes also close before the next tag and at the end of an
+# inline template.
+autoclose_before = ">})]\"'<`"
 brackets = [
   # Closes an unfinished opening tag: `<app-card` + `/` gives `<app-card/>`.
   # cursor_after_end puts the caret after `>` in Zed builds that support it;

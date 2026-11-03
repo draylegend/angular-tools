@@ -48,10 +48,14 @@ const CSS_VERSION: &str = "6.3.10";
 // work directory.
 const PLUGIN_PACKAGE: &str = "angular-tools";
 const PLUGIN_DIR: &str = "plugin";
-const PLUGIN_FILES: [(&str, &str); 10] = [
+const PLUGIN_FILES: [(&str, &str); 11] = [
     ("package.json", include_str!("../plugin/package.json")),
     ("index.js", include_str!("../plugin/index.js")),
     ("lsp.js", include_str!("../plugin/lsp.js")),
+    (
+        "angular-imports.js",
+        include_str!("../plugin/angular-imports.js"),
+    ),
     (
         "selector-rename.js",
         include_str!("../plugin/selector-rename.js"),

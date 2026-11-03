@@ -10,6 +10,7 @@ const {spawn} = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const {fileURLToPath, pathToFileURL} = require('node:url');
+const {languageServiceStandIn, withPublicImports} = require('./angular-imports.js');
 const {applyChanges, encode, frames, lineStarts, toOffset, toPosition} = require('./lsp.js');
 const {inspect, versionNumbers} = require('./project.js');
 const {containedIn, findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
@@ -26,7 +27,16 @@ const projectEntry = projectDirs
   .find(entry => fs.existsSync(entry));
 const serverEntry = projectEntry ?? fallbackEntry;
 const serverDir = path.dirname(serverEntry);
-const ngProbeLocations = projectEntry ? [...projectDirs, serverDir] : [serverDir];
+const realProbeLocations = projectEntry ? [...projectDirs, serverDir] : [serverDir];
+const ngProbeLocations = (() => {
+  try {
+    const standIn = projectInfo.angular && languageServiceStandIn(realProbeLocations, path.join(__dirname, 'language-service'));
+    return standIn ? [standIn, ...realProbeLocations] : realProbeLocations;
+  } catch (error) {
+    process.stderr.write(`angular-tools: ${error.stack ?? error}\n`);
+    return realProbeLocations;
+  }
+})();
 const tsProbeLocations = [...projectDirs, serverDir];
 const ts = require(require.resolve('typescript', {paths: tsProbeLocations}));
 
@@ -45,6 +55,9 @@ function versionArguments() {
 // A crashed server, for example out of memory, starts again with the open
 // documents, a limited number of times. Requests it left unanswered fail.
 const MAX_RESTARTS = 5;
+// Answers that may import a directive, which get public import paths.
+const IMPORTING_REQUESTS = new Set(['completionItem/resolve', 'codeAction/resolve']);
+const importingRequests = new Set();
 const RESTART_INITIALIZE_ID = 'angular-tools-restart';
 const pendingRequests = new Set();
 let restarts = 0;
@@ -274,6 +287,8 @@ function parsedHtml({textDocument: {uri}}) {
 // client's command: the proxy asks the server for the component and tells the
 // editor to show it.
 const GO_TO_COMPONENT = 'angular-tools.goToComponent';
+// The official client applies the imports of a completion with this command.
+const APPLY_COMPLETION_ACTION = 'angular.applyCompletionCodeAction';
 const INTERNAL_ID = 'angular-tools-internal-';
 const codeActionRequests = new Map();
 const componentRequests = new Map();
@@ -364,6 +379,13 @@ frames(process.stdin, (message, frame) => {
       return reply(id, params);
     } else if (method === 'workspace/executeCommand' && params.command === GO_TO_COMPONENT) {
       return goToComponent(id, params.arguments[0]);
+    } else if (angular && IMPORTING_REQUESTS.has(method)) {
+      importingRequests.add(id);
+    } else if (method === 'workspace/executeCommand' && params.command === APPLY_COMPLETION_ACTION) {
+      for (const edit of params.arguments?.[0] ?? []) {
+        process.stdout.write(encode({jsonrpc: '2.0', id: INTERNAL_ID + ++internalRequests, method: 'workspace/applyEdit', params: {edit}}));
+      }
+      return reply(id, null);
     } else if (method === 'textDocument/formatting' && angular) {
       format(params).then(
         edits => reply(id, edits),
@@ -389,6 +411,14 @@ function onServerMessage(message, frame) {
     componentRequests.delete(message.id);
     return showComponent(id, message.result);
   }
+  if (importingRequests.delete(message?.id) && message.result) {
+    try {
+      message.result = withPublicImports(message.result, projectDirs);
+      frame = encode(message);
+    } catch (error) {
+      process.stderr.write(`angular-tools: ${error.stack ?? error}\n`);
+    }
+  }
   if (codeActionRequests.has(message?.id)) {
     const uri = codeActionRequests.get(message.id);
     codeActionRequests.delete(message.id);
@@ -401,7 +431,7 @@ function onServerMessage(message, frame) {
   if (angular && initializeId !== undefined && message?.id === initializeId && message.result?.capabilities) {
     message.result.capabilities.documentFormattingProvider = true;
     message.result.capabilities.documentOnTypeFormattingProvider = {firstTriggerCharacter: '>'};
-    message.result.capabilities.executeCommandProvider = {commands: [GO_TO_COMPONENT]};
+    message.result.capabilities.executeCommandProvider = {commands: [GO_TO_COMPONENT, APPLY_COMPLETION_ACTION]};
     frame = encode(message);
   }
   process.stdout.write(frame);

@@ -469,7 +469,7 @@ test('the proxy offers and runs Go to component in templates', async () => {
     const uri = pathToFileURL(path.join(dir, 'a.html')).href;
     send({id: 1, method: 'initialize', params: {rootUri: pathToFileURL(dir).href}});
     const initialized = await received(message => message.id === 1);
-    assert.deepEqual(initialized.result.capabilities.executeCommandProvider.commands, ['angular-tools.goToComponent']);
+    assert.deepEqual(initialized.result.capabilities.executeCommandProvider.commands, ['angular-tools.goToComponent', 'angular.applyCompletionCodeAction']);
     const range = {start: {line: 0, character: 0}, end: {line: 0, character: 0}};
     send({id: 2, method: 'textDocument/codeAction', params: {textDocument: {uri}, range, context: {diagnostics: [], only: ['quickfix']}}});
     const [action] = (await received(message => message.id === 2)).result;
@@ -484,6 +484,10 @@ test('the proxy offers and runs Go to component in templates', async () => {
     assert.equal(show.params.takeFocus, true);
     assert.equal((await received(message => message.id === 5)).result, null);
     send({id: show.id, result: {success: true}});
+    const edit = {changes: {'file:///a.ts': []}};
+    send({id: 6, method: 'workspace/executeCommand', params: {command: 'angular.applyCompletionCodeAction', arguments: [[edit]]}});
+    assert.deepEqual((await received(message => message.method === 'workspace/applyEdit')).params, {edit});
+    assert.equal((await received(message => message.id === 6)).result, null);
     proxy.stdin.end();
   } finally {
     fs.rmSync(dir, {recursive: true, force: true});

@@ -8,7 +8,11 @@
 // does any request this plugin fails to answer.
 'use strict';
 
+const {addAngularLibraries, importsBeforeCompletion, withPublicImports} = require('./angular-imports.js');
 const {containedIn, findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
+
+// The snippet of an Angular binding or attribute, such as `[ngClass]="$1"`.
+const BINDING_SNIPPET = /^[[(]*[\w.@$-]+[\])]*="\$1"$/;
 
 function init({typescript: ts}) {
   function create(info) {
@@ -19,6 +23,10 @@ function init({typescript: ts}) {
     // folder that bounds the search, so it gets none.
     const configured = info.project.projectKind === ts.server.ProjectKind.Configured;
     const roots = configured ? [info.project.getCurrentDirectory()] : [];
+    // Directives of the libraries that the project depends on complete even
+    // where nothing in the program uses these libraries yet.
+    if (configured) addAngularLibraries(info.project);
+
     const project = {
       ts,
       sourceFiles: () =>
@@ -99,6 +107,61 @@ function init({typescript: ts}) {
 
     const proxy = Object.create(null);
     for (const key of Object.keys(service)) proxy[key] = (...args) => service[key](...args);
+
+    const publicActions = actions => withPublicImports(actions, [info.project.getCurrentDirectory()]);
+
+    // TypeScript reads includeInsertTextCompletions, which vtsls sends, as
+    // includeCompletionsWithInsertText, but the Angular service reads only the
+    // latter, so without it bindings complete without `="…"`. Before an
+    // unclosed `[` or `(`, the service leaves the name to be replaced, and a binding
+    // such as `[ngClass]="…"` would double the bracket, so the span takes it in.
+    // A variant that does not start with the typed brackets, such as the
+    // attribute `ngClass="…"` after `[ngc`, would remove them. Clients that
+    // filter by the whole span, as VS Code does, hide it, and Zed, which
+    // filters by the word, gets it no more.
+    proxy.getCompletionsAtPosition = (fileName, position, options, ...rest) => {
+      const withInsertText = options && {
+        ...options,
+        includeCompletionsWithInsertText: options.includeCompletionsWithInsertText || options.includeInsertTextCompletions,
+      };
+      const completions = service.getCompletionsAtPosition(fileName, position, withInsertText, ...rest);
+      if (!completions) return completions;
+      return (
+        attempt(() => {
+          const text = project.readFile(fileName);
+          if (text === undefined) return completions;
+          const entries = completions.entries.flatMap(entry => {
+            if (!entry.isSnippet || !BINDING_SNIPPET.test(entry.insertText ?? '')) return [entry];
+            const word = /[\w.@$-]*$/.exec(text.slice(0, position))[0];
+            const span = entry.replacementSpan ?? {start: position - word.length, length: word.length};
+            const opening = /[[(]*$/.exec(text.slice(0, span.start))[0];
+            const start = span.start - opening.length;
+            const typed = /^[[(]*/.exec(text.slice(start, position))[0];
+            if (!entry.insertText.startsWith(typed)) return [];
+            if (!opening) return [entry];
+            return [{...entry, replacementSpan: {start, length: span.length + opening.length}}];
+          });
+          return {...completions, entries};
+        }) ?? completions
+      );
+    };
+
+    proxy.getCompletionEntryDetails = (fileName, position, ...rest) => {
+      const details = service.getCompletionEntryDetails(fileName, position, ...rest);
+      if (!details?.codeActions) return details;
+      return (
+        attempt(() => {
+          const sourceFile = service.getProgram()?.getSourceFile(fileName);
+          const codeActions = importsBeforeCompletion(ts, sourceFile, position, publicActions(details.codeActions));
+          return {...details, codeActions};
+        }) ?? details
+      );
+    };
+
+    proxy.getCodeFixesAtPosition = (...args) => {
+      const fixes = service.getCodeFixesAtPosition(...args);
+      return attempt(() => publicActions(fixes)) ?? fixes;
+    };
 
     proxy.getRenameInfo = (fileName, position, ...rest) => {
       const rename = selectorUses(fileName, position);

@@ -83,3 +83,33 @@ test('find references leads to templates instead of generated type-check files',
     ],
   );
 });
+
+test('Angular bindings complete as snippets, take in an unclosed bracket and keep it', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'angular-tools-'));
+  try {
+    const fileName = path.join(dir, 'a.html').replace(/\\/g, '/');
+    fs.writeFileSync(fileName, '<p [ngc');
+    let received;
+    const entries = [
+      {name: '[ngClass]', isSnippet: true, insertText: '[ngClass]="$1"'},
+      {name: 'ngClass', isSnippet: true, insertText: 'ngClass="$1"', replacementSpan: {start: 4, length: 3}},
+      {name: 'title', insertText: 'title'},
+    ];
+    const getCompletionsAtPosition = (_fileName, _position, options) => {
+      received = options;
+      return {entries};
+    };
+    const {plugin} = create({projectKind: ts.server.ProjectKind.Inferred, service: {getCompletionsAtPosition}});
+    const result = plugin.getCompletionsAtPosition(fileName, 7, {includeInsertTextCompletions: true});
+    assert.equal(received.includeCompletionsWithInsertText, true);
+    assert.deepStrictEqual(
+      result.entries.map(entry => [entry.name, entry.replacementSpan]),
+      [['[ngClass]', {start: 3, length: 4}], ['title', undefined]],
+    );
+    fs.writeFileSync(fileName, '<p ngc');
+    const plain = plugin.getCompletionsAtPosition(fileName, 6, {includeInsertTextCompletions: true});
+    assert.deepStrictEqual(plain.entries.map(entry => entry.name), ['[ngClass]', 'ngClass', 'title']);
+  } finally {
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
+});

@@ -3,3 +3,5 @@
 /grammars/
 *.wasm
 /node_modules/
+# Written by the proxy next to itself when it runs from this folder.
+plugin/language-service/

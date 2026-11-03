@@ -4,6 +4,10 @@
 
 - Fixed text in inline `template:` strings taking the color of a TypeScript string.
 - Fixed a large library hiding a nested Angular project in workspaces of over 50,000 files.
+- Added completion of directives that a component does not import yet in libraries that do not use their package, such as `[ngClass]` without any use of `@angular/common`.
+- Added the imports of such a completion when it is chosen in an `.html` template, and fixed them naming an internal file such as `@angular/common/types/_common_module-chunk` instead of the package.
+- Fixed Zed dropping the new `imports: […]` of such a completion in an inline `template:` string.
+- Fixed bindings such as `[ngClass]` completing in inline `template:` strings without `="…"`, with a doubled bracket after an unclosed `[`, and with variants such as `ngClass` that drop a typed `[`.
 - Added Tailwind completion for unquoted keys in `[ngClass]="{flex: a}"` and `[class]="{flex: a}"`.
 
 ## 0.21.0 - 2026-11-02

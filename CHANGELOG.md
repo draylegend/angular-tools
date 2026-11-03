@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Added the closing tag after typing `>` of an opening tag in inline `template:` strings.
+- Fixed attribute completions showing up right after the closing quote of an attribute value and after `>` of a tag in inline `template:` strings.
 - Fixed brackets and quotes not closing right before a tag, such as `{` in `<p>{</p>`, in files of the Angular language and inline `template:` strings.
 
 ## 0.22.0 - 2026-11-03

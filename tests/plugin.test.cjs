@@ -113,3 +113,21 @@ test('Angular bindings complete as snippets, take in an unclosed bracket and kee
     fs.rmSync(dir, {recursive: true, force: true});
   }
 });
+
+test('nothing completes right after the end of a tag or of an attribute value', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'angular-tools-'));
+  try {
+    const fileName = path.join(dir, 'a.html').replace(/\\/g, '/');
+    const text = `<p [a]="{'b': c}"><b title='x'>{{ d >`;
+    fs.writeFileSync(fileName, text);
+    const getCompletionsAtPosition = () => ({entries: [{name: 'title'}]});
+    const {plugin} = create({projectKind: ts.server.ProjectKind.Inferred, service: {getCompletionsAtPosition}});
+    const complete = after => plugin.getCompletionsAtPosition(fileName, text.indexOf(after) + after.length, {});
+    assert.equal(complete('c}"'), undefined);
+    assert.equal(complete('c}">'), undefined);
+    assert.equal(complete("'x'"), undefined);
+    for (const open of ['<p ', '<p [a]="', "{'b", '{{ d >', '<']) assert.ok(complete(open), open);
+  } finally {
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
+});

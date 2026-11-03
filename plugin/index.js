@@ -9,7 +9,7 @@
 'use strict';
 
 const {addAngularLibraries, importsBeforeCompletion, withPublicImports} = require('./angular-imports.js');
-const {containedIn, findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
+const {containedIn, declarations, findFiles, renameLocations, selectorLocations, targetAt} = require('./selector-rename.js');
 
 // The snippet of an Angular binding or attribute, such as `[ngClass]="$1"`.
 const BINDING_SNIPPET = /^[[(]*[\w.@$-]+[\])]*="\$1"$/;
@@ -120,6 +120,7 @@ function init({typescript: ts}) {
     // filter by the whole span, as VS Code does, hide it, and Zed, which
     // filters by the word, gets it no more.
     proxy.getCompletionsAtPosition = (fileName, position, options, ...rest) => {
+      if (attempt(() => afterTagOrValue(fileName, position))) return undefined;
       const withInsertText = options && {
         ...options,
         includeCompletionsWithInsertText: options.includeCompletionsWithInsertText || options.includeInsertTextCompletions,
@@ -144,6 +145,33 @@ function init({typescript: ts}) {
           return {...completions, entries};
         }) ?? completions
       );
+    };
+
+    // Right after the `>` of a tag or the closing quote of an attribute value,
+    // the service offers attribute names, which belong only after whitespace.
+    // vtsls asks for completions after every `"`, and Zed keeps the list open
+    // while `>` follows, so these would show up after each attribute.
+    const afterTagOrValue = (fileName, position) => {
+      let template;
+      if (fileName.endsWith('.html')) {
+        template = {text: project.readFile(fileName) ?? '', offset: 0};
+      } else {
+        const sourceFile = service.getProgram()?.getSourceFile(fileName);
+        template = sourceFile && declarations(ts, sourceFile)
+          .map(declaration => declaration.template)
+          .find(found => found?.text !== undefined && position >= found.offset && position <= found.offset + found.text.length);
+      }
+      if (!template) return false;
+      const before = template.text.slice(0, position - template.offset).replace(/[\w-]*$/, '');
+      if (before.lastIndexOf('{{') > before.lastIndexOf('}}')) return false;
+      const tag = before.slice(before.lastIndexOf('<'));
+      if (!tag.startsWith('<') || /^<\/?[\w-]*$/.test(tag)) return false;
+      let quote;
+      for (const char of tag) {
+        if (quote) quote = char === quote ? undefined : quote;
+        else if (char === '"' || char === "'") quote = char;
+      }
+      return !quote && /[>"']$/.test(tag);
     };
 
     proxy.getCompletionEntryDetails = (fileName, position, ...rest) => {

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.22.0 - 2026-11-03
 
 - Fixed text in inline `template:` strings taking the color of a TypeScript string.
 - Fixed a large library hiding a nested Angular project in workspaces of over 50,000 files.

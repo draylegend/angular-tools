@@ -48,6 +48,37 @@ test('the libraries join the program once there are files in it', () => {
   assert.deepEqual(project.getScriptFileNames(), names);
 });
 
+test('types under export conditions, as in @types/ws, resolve to a path', () => {
+  const root = workspace();
+  const write = (file, content) => {
+    fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+    fs.writeFileSync(path.join(root, file), content);
+  };
+  const dependencies = {'@angular/core': '1', '@angular/common': '1', '@types/ws': '8.18.2', 'ui-kit': '1'};
+  write('package.json', JSON.stringify({dependencies}));
+  const types = {import: './index.d.mts', default: './index.d.ts'};
+  write('node_modules/@types/ws/package.json', JSON.stringify({exports: {'.': {types}}}));
+  write('node_modules/@types/ws/index.d.ts', '');
+  write('node_modules/ui-kit/package.json', JSON.stringify({peerDependencies: {'@angular/core': '1'}, exports: {'.': {types}}}));
+  write('node_modules/ui-kit/index.d.ts', '');
+  const kit = path.join(root, 'node_modules/ui-kit/index.d.ts').replaceAll(path.sep, '/');
+  assert.deepEqual(angularLibraries(root), [common(root), kit]);
+});
+
+test('a failure to read the libraries leaves the program as it is', () => {
+  const log = [];
+  const project = {
+    getScriptFileNames: () => ['/a.ts'],
+    getCurrentDirectory: () => {
+      throw new Error('unreadable');
+    },
+    projectService: {logger: {info: message => log.push(message)}},
+  };
+  addAngularLibraries(project);
+  assert.deepEqual(project.getScriptFileNames(), ['/a.ts']);
+  assert.match(log[0], /unreadable/);
+});
+
 test('an import from a chunk of a package names the package, if it exports the name', () => {
   const root = workspace();
   const edit = names => ({newText: `\nimport { ${names} } from '../../node_modules/@angular/common/types/_chunk';`});

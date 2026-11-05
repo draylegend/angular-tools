@@ -22,13 +22,18 @@ const ancestors = dir => {
   return parent === dir ? [dir] : [dir, ...ancestors(parent)];
 };
 
+// `types` is a path or, under export conditions, an object such as
+// `{"import": "./index.d.mts", "default": "./index.d.ts"}`.
+const typesPath = types =>
+  typeof types === 'string' ? types : types && typeof types === 'object' ? typesPath(types.default ?? Object.values(types)[0]) : undefined;
+
 // The installed package seen from a folder, with its type declarations.
 function findPackage(name, dir) {
   for (const current of ancestors(dir)) {
     const root = path.join(current, 'node_modules', name);
     const manifest = readManifest(path.join(root, 'package.json'));
     if (manifest) {
-      const types = manifest.exports?.['.']?.types ?? manifest.types ?? manifest.typings;
+      const types = typesPath(manifest.exports?.['.']?.types ?? manifest.types ?? manifest.typings);
       return {manifest, types: types && path.join(root, types)};
     }
   }
@@ -57,7 +62,13 @@ function addAngularLibraries(project) {
   project.getScriptFileNames = () => {
     const names = rootNames();
     if (!names.length) return names;
-    libraries ??= angularLibraries(project.getCurrentDirectory());
+    // An error here would end tsserver, so a package it cannot read adds nothing.
+    try {
+      libraries ??= angularLibraries(project.getCurrentDirectory());
+    } catch (error) {
+      project.projectService?.logger?.info(`angular-tools: ${error.stack ?? error}`);
+      libraries = [];
+    }
     return [...names, ...libraries.filter(library => !names.includes(library))];
   };
 }

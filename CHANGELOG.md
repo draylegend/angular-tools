@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed the TypeScript server crashing in projects that depend on a package whose types are export conditions, such as `@types/ws` 8.18.2.
+
 ## 0.23.0 - 2026-11-03
 
 - Added the closing tag after typing `>` of an opening tag in inline `template:` strings.
